@@ -7,7 +7,9 @@ import {
   Shield,
   UserCog,
   DollarSign,
-  FileText
+  FileText,
+  LogOut,
+  User
 } from "lucide-react"
 import {
   Sidebar,
@@ -21,8 +23,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { title } from "process"
+import { useAuth } from '@/contexts/auth-context'
 
 const menuItems = [
   {
@@ -36,7 +39,7 @@ const menuItems = [
     icon: CreditCard,
   },
   {
-    title: "Users",
+    title: "Customers",
     url: "/users",
     icon: Users,
   },
@@ -63,20 +66,27 @@ const menuItems = [
 ]
 
 export function AppSidebar() {
+  const { user, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    window.location.href = '/login'
+  }
+
   return (
     <Sidebar variant="inset" className="bg-gray-100">
       <SidebarHeader className="border-b rounded-t-lg">
         <div className="flex items-center gap-2 px-2 py-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <DollarSign className="h-4 w-4" />
+            <CreditCard className="h-4 w-4" />
           </div>
           <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-semibold">Credilife</span>
-            <span className="truncate text-xs text-muted-foreground">Management</span>
+            <span className="truncate font-semibold">CrediLife</span>
+            <span className="truncate text-xs text-muted-foreground">Dashboard</span>
           </div>
         </div>
       </SidebarHeader>
-      <SidebarContent className="rounded-b-lg">
+      <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -95,9 +105,29 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <div className="p-2 text-xs text-muted-foreground">
-          © 2024 LoanFlow
+      <SidebarFooter className="border-t">
+        {user && (
+          <div className="p-3 space-y-3">
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <div className="flex-1 min-w-0">
+                <p className="truncate font-medium">{user.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{user.role}</p>
+              </div>
+            </div>
+            <Button 
+              onClick={handleLogout}
+              variant="outline" 
+              size="sm" 
+              className="w-full text-xs"
+            >
+              <LogOut className="h-3 w-3 mr-2" />
+              Sign Out
+            </Button>
+          </div>
+        )}
+        <div className="p-2 text-center text-xs text-muted-foreground">
+          © 2025 CrediLife
         </div>
       </SidebarFooter>
     </Sidebar>

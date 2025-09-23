@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function PATCH(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const applicationId = params.id;
+        const { id: applicationId } = await params;
         
         if (!applicationId) {
             return NextResponse.json(

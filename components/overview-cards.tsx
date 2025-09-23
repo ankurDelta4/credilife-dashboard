@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { DollarSign, Users, FileText, UserCheck, TrendingUp, TrendingDown } from "lucide-react"
+import { CreditCard, Users, FileText, UserCheck, TrendingUp, TrendingDown } from "lucide-react"
 
 interface DashboardStats {
   totalLoans: {
@@ -137,10 +137,10 @@ export function OverviewCards() {
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <MetricCard
         title="Total Loans"
-        value={`$${stats.totalLoans.value.toLocaleString()}`}
+        value={stats.totalLoans.value.toLocaleString()}
         change={`${stats.totalLoans.change > 0 ? '+' : ''}${stats.totalLoans.change}%`}
         changeType={stats.totalLoans.changeType}
-        icon={<DollarSign className="h-4 w-4" />}
+        icon={<CreditCard className="h-4 w-4" />}
         description="from last month"
       />
       <MetricCard

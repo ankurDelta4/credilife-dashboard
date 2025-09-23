@@ -3,13 +3,20 @@
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { DataTable, Column } from "@/components/data-table"
-import { LoanApprovalModal } from "@/components/loan-approval-modal"
+import { LoanDetailsModal } from "@/components/loan-details-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Filter } from "lucide-react"
+import { Plus, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+} from "@/components/ui/pagination"
 
 interface Loan {
   id: string
@@ -42,6 +49,8 @@ export default function LoanPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   useEffect(() => {
     fetchLoans()
@@ -74,6 +83,19 @@ export default function LoanPage() {
     return matchesSearch && matchesStatus
   })
 
+  const totalPages = Math.ceil(filteredLoans.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedLoans = filteredLoans.slice(startIndex, endIndex)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter])
+
 
   const handleNewLoan = () => {
     console.log("Create new loan")
@@ -84,37 +106,6 @@ export default function LoanPage() {
     setIsModalOpen(true)
   }
 
-  const handleApprove = async (loan: Loan) => {
-    try {
-      // TODO: Add API call to approve loan
-      // const response = await fetch(`/api/loans/${loan.id}/approve`, { method: 'POST' })
-      
-      setLoans(prevLoans =>
-        prevLoans.map(l =>
-          l.id === loan.id ? { ...l, status: "active" } : l
-        )
-      )
-      console.log("Loan approved:", loan.id)
-    } catch (error) {
-      console.error("Error approving loan:", error)
-    }
-  }
-
-  const handleReject = async (loan: Loan) => {
-    try {
-      // TODO: Add API call to reject loan
-      // const response = await fetch(`/api/loans/${loan.id}/reject`, { method: 'POST' })
-      
-      setLoans(prevLoans =>
-        prevLoans.map(l =>
-          l.id === loan.id ? { ...l, status: "rejected" } : l
-        )
-      )
-      console.log("Loan rejected:", loan.id)
-    } catch (error) {
-      console.error("Error rejecting loan:", error)
-    }
-  }
 
   const handleCloseModal = () => {
     setIsModalOpen(false)
@@ -203,22 +194,90 @@ export default function LoanPage() {
                 <div className="text-red-500">{error}</div>
               </div>
             ) : (
-              <DataTable
-                columns={loanColumns}
-                data={filteredLoans}
-                onRowClick={handleRowClick}
-              />
+              <>
+                <DataTable
+                  columns={loanColumns}
+                  data={paginatedLoans}
+                  onRowClick={handleRowClick}
+                />
+                
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between py-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredLoans.length)} of {filteredLoans.length} loans
+                    </div>
+                    
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Previous
+                          </Button>
+                        </PaginationItem>
+                        
+                        {[...Array(totalPages)].map((_, index) => {
+                          const pageNum = index + 1
+                          if (
+                            pageNum === 1 ||
+                            pageNum === totalPages ||
+                            (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                          ) {
+                            return (
+                              <PaginationItem key={pageNum}>
+                                <PaginationLink
+                                  onClick={() => handlePageChange(pageNum)}
+                                  isActive={currentPage === pageNum}
+                                  className="cursor-pointer"
+                                  size="icon"
+                                >
+                                  {pageNum}
+                                </PaginationLink>
+                              </PaginationItem>
+                            )
+                          } else if (
+                            pageNum === currentPage - 2 ||
+                            pageNum === currentPage + 2
+                          ) {
+                            return (
+                              <PaginationItem key={pageNum}>
+                                <PaginationEllipsis />
+                              </PaginationItem>
+                            )
+                          }
+                          return null
+                        })}
+                        
+                        <PaginationItem>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                          >
+                            Next
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
-
-        <LoanApprovalModal
+        <LoanDetailsModal
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           loan={selectedLoan}
-          onApprove={handleApprove}
-          onReject={handleReject}
         />
+
       </div>
     </DashboardLayout>
   )

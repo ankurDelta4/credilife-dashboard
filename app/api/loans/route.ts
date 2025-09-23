@@ -119,12 +119,24 @@ export async function GET(request: NextRequest) {
                     // Transform data to match frontend field names
                     let transformedData = backendData.map((item: any) => {
                         if (type === 'applications') {
+                            // Parse user_data if it's a string
+                            let parsedUserData = null;
+                            if (item.user_data) {
+                                try {
+                                    parsedUserData = typeof item.user_data === 'string' 
+                                        ? JSON.parse(item.user_data) 
+                                        : item.user_data;
+                                } catch (e) {
+                                    console.error('Failed to parse user_data:', e);
+                                }
+                            }
+                            
                             return {
                                 id: item.id,
-                                customerName: item.user_data?.first_name && item.user_data?.last_name 
-                                    ? `${item.user_data.first_name} ${item.user_data.last_name}`
+                                customerName: parsedUserData?.first_name && parsedUserData?.last_name 
+                                    ? `${parsedUserData.first_name} ${parsedUserData.last_name}`
                                     : item.users?.name || item.customer_name || 'N/A',
-                                email: item.user_data?.email || item.users?.email || item.email || 'N/A',
+                                email: parsedUserData?.email || item.users?.email || item.email || 'N/A',
                                 amount: item.requested_amount || item.amount,
                                 status: item.status,
                                 tenure: item.tenure || 'N/A',
@@ -135,7 +147,8 @@ export async function GET(request: NextRequest) {
                                 principalAmount: item.principal_amount || item.requested_amount || 0,
                                 closingFees: item.closing_fees || 0,
                                 totalRepayment: item.total_repayment || 0,
-                                loanPurpose: item.loan_purpose || 'N/A'
+                                loanPurpose: item.loan_purpose || 'N/A',
+                                user_data: item.user_data // Include the raw user_data field
                             };
                         } else {
                             console.log("into else case")

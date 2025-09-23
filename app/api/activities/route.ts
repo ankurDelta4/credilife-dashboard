@@ -84,32 +84,136 @@ export async function GET(request: NextRequest) {
         if (type) queryParams.append('type', type);
 
         try {
-            const backendResponse = await fetch(`${backendUrl}/activities?select=*&order=timestamp.desc`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': `${process.env.API_KEY || ''}`,
-                    'Authorization': `Bearer ${process.env.API_KEY || ''}`,
-                },
-            });
+            // Generate real activities from actual database events
+            const [loansResponse, applicationsResponse, usersResponse] = await Promise.all([
+                fetch(`${backendUrl}/loans?select=*,users(name)&order=created_at.desc&limit=20`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': `${process.env.API_KEY || ''}`,
+                        'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                    },
+                }),
+                fetch(`${backendUrl}/loan_applications?select=*,users(name)&order=created_at.desc&limit=20`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': `${process.env.API_KEY || ''}`,
+                        'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                    },
+                }),
+                fetch(`${backendUrl}/users?select=name,id,created_at&order=created_at.desc&limit=10`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': `${process.env.API_KEY || ''}`,
+                        'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                    },
+                })
+            ]);
 
-            if (backendResponse.ok) {
-                const backendData = await backendResponse.json();
-                console.log("Backend activities data", backendData);
-                
-                if (backendData && Array.isArray(backendData) && backendData.length > 0) {
+            if (loansResponse.ok && applicationsResponse.ok) {
+                const loans = await loansResponse.json();
+                const applications = await applicationsResponse.json();
+                const users = usersResponse.ok ? await usersResponse.json() : [];
+
+                console.log("Real data:", { loans: loans.length, applications: applications.length, users: users.length });
+
+                // Generate activities from real events
+                const realActivities = [];
+                let activityId = 1;
+
+                // Add loan-related activities
+                if (Array.isArray(loans)) {
+                    loans.forEach((loan: any) => {
+                        const userName = loan.users?.name || `User ${loan.user_id}`;
+                        
+                        if (loan.status === 'active' || loan.status === 'running') {
+                            realActivities.push({
+                                id: activityId++,
+                                type: 'loan_approved',
+                                description: `Loan approved for ${userName}`,
+                                timestamp: loan.created_at || loan.start_date,
+                                amount: loan.principal_amount || loan.amount,
+                                userId: loan.user_id
+                            });
+                        }
+                        
+                        if (loan.status === 'completed') {
+                            realActivities.push({
+                                id: activityId++,
+                                type: 'payment_received',
+                                description: `Final payment received from ${userName}`,
+                                timestamp: loan.updated_at || loan.end_date,
+                                amount: loan.principal_amount || loan.amount,
+                                userId: loan.user_id
+                            });
+                        }
+
+                        if (loan.status === 'overdue') {
+                            realActivities.push({
+                                id: activityId++,
+                                type: 'loan_overdue',
+                                description: `${userName}'s payment is overdue`,
+                                timestamp: loan.updated_at || loan.created_at,
+                                amount: loan.principal_amount || loan.amount,
+                                userId: loan.user_id
+                            });
+                        }
+                    });
+                }
+
+                // Add application activities
+                if (Array.isArray(applications)) {
+                    applications.forEach((app: any) => {
+                        const userName = app.users?.name || app.customer_name || `User ${app.user_id}`;
+                        
+                        realActivities.push({
+                            id: activityId++,
+                            type: 'application_submitted',
+                            description: `New loan application from ${userName}`,
+                            timestamp: app.created_at || app.submit_date,
+                            amount: app.principal_amount || app.requested_amount || app.amount,
+                            userId: app.user_id
+                        });
+                    });
+                }
+
+                // Add user registration activities
+                if (Array.isArray(users)) {
+                    users.slice(0, 5).forEach((user: any) => { // Limit to recent 5 users
+                        realActivities.push({
+                            id: activityId++,
+                            type: 'user_registered',
+                            description: `New user registered: ${user.name}`,
+                            timestamp: user.created_at,
+                            amount: null,
+                            userId: user.id
+                        });
+                    });
+                }
+
+                // Sort by timestamp descending (most recent first)
+                realActivities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+                // Apply pagination
+                const startIndex = (page - 1) * limit;
+                const endIndex = startIndex + limit;
+                const paginatedActivities = realActivities.slice(startIndex, endIndex);
+
+                if (realActivities.length > 0) {
                     return NextResponse.json({
                         success: true,
                         data: {
-                            activities: backendData,
+                            activities: paginatedActivities,
                             pagination: {
                                 page,
                                 limit,
-                                total: backendData.length,
-                                totalPages: Math.ceil(backendData.length / limit)
+                                total: realActivities.length,
+                                totalPages: Math.ceil(realActivities.length / limit)
                             }
                         },
-                        message: 'Activities retrieved successfully'
+                        message: 'Real activities retrieved successfully'
                     });
                 }
             }
@@ -176,7 +280,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate activity type
-        const validTypes = ['payment_received', 'application_submitted', 'loan_approved', 'loan_overdue'];
+        const validTypes = ['payment_received', 'application_submitted', 'loan_approved', 'loan_overdue', 'user_registered'];
         if (!validTypes.includes(type)) {
             return NextResponse.json(
                 {

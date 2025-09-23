@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DashboardLayout } from "@/components/dashboard-layout"
+import { ProtectedPageLayout } from "@/components/protected-page-layout"
 import { OverviewCards } from "@/components/overview-cards"
 import { DataTable, Column } from "@/components/data-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,7 @@ import { Activity } from "lucide-react"
 
 interface RecentActivity {
   id: number
-  type: "loan_approved" | "payment_received" | "application_submitted" | "loan_overdue"
+  type: "loan_approved" | "payment_received" | "application_submitted" | "loan_overdue" | "user_registered"
   description: string
   timestamp: string
   amount?: number
@@ -66,6 +66,7 @@ const activityTypeIcons = {
   payment_received: "💰",
   application_submitted: "📝",
   loan_overdue: "⚠️",
+  user_registered: "👤",
 }
 
 
@@ -138,7 +139,7 @@ export default function Dashboard() {
   }
 
   return (
-    <DashboardLayout>
+    <ProtectedPageLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -262,6 +263,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </ProtectedPageLayout>
   )
 }

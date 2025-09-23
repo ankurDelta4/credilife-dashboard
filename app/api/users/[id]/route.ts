@@ -154,6 +154,96 @@ export async function PUT(
     }
 }
 
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: { id: string } }
+) {
+    try {
+        const { id } = params;
+        const body = await request.json();
+
+        if (!id) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'Invalid user ID',
+                    code: 'INVALID_ID'
+                },
+                { status: 400 }
+            );
+        }
+
+        // Try to update in Supabase first
+        const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
+        
+        try {
+            console.log(`Updating user ${id} with data:`, body);
+            
+            const backendResponse = await fetch(`${backendUrl}/users?id=eq.${id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': `${process.env.API_KEY || ''}`,
+                    'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                },
+                body: JSON.stringify({
+                    ...body,
+                    updated_at: new Date().toISOString()
+                })
+            });
+
+            console.log(`Backend response status: ${backendResponse.status}`);
+            
+            if (backendResponse.ok) {
+                console.log('User updated successfully in backend');
+                return NextResponse.json({
+                    success: true,
+                    message: 'User updated successfully'
+                });
+            } else {
+                const errorData = await backendResponse.text();
+                console.log('Backend error response:', errorData);
+            }
+        } catch (backendError) {
+            console.log("Backend update error:", backendError);
+        }
+
+        // Fallback to local update if backend fails
+        const userId = parseInt(id);
+        if (!isNaN(userId)) {
+            const userIndex = users.findIndex(u => u.id === userId);
+            if (userIndex !== -1) {
+                users[userIndex] = { ...users[userIndex], ...body };
+                return NextResponse.json({
+                    success: true,
+                    data: { user: users[userIndex] },
+                    message: 'User updated successfully (fallback)'
+                });
+            }
+        }
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'User not found',
+                code: 'USER_NOT_FOUND'
+            },
+            { status: 404 }
+        );
+
+    } catch (error) {
+        console.error('Error updating user:', error);
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'Internal server error',
+                code: 'INTERNAL_ERROR'
+            },
+            { status: 500 }
+        );
+    }
+}
+
 export async function DELETE(
     request: NextRequest,
     { params }: { params: { id: string } }

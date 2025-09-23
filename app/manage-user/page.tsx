@@ -25,65 +25,26 @@ interface SystemUser {
   id: number
   name: string
   email: string
-  role: "admin" | "manager" | "agent" | "viewer"
-  department: string
+  phone?: string
+  phone_number?: string
+  role: "admin" | "manager" | "agent" | "user"
   status: "active" | "inactive" | "suspended"
-  lastLogin: string
-  createdAt: string
+  lastLogin?: string
+  last_login?: string
+  createdAt?: string
+  created_at?: string
 }
 
-const mockSystemUsers: SystemUser[] = [
-  {
-    id: "U001",
-    name: "John Doe",
-    email: "john.doe@loanflow.com",
-    role: "admin",
-    department: "IT",
-    status: "active",
-    lastLogin: new Date("2024-09-19T10:30:00"),
-    createdAt: new Date("2024-01-15")
-  },
-  {
-    id: "U002", 
-    name: "Jane Smith",
-    email: "jane.smith@loanflow.com",
-    role: "manager",
-    department: "Loans",
-    status: "active",
-    lastLogin: new Date("2024-09-19T09:15:00"),
-    createdAt: new Date("2024-02-20")
-  },
-  {
-    id: "U003",
-    name: "Mike Johnson",
-    email: "mike.johnson@loanflow.com", 
-    role: "agent",
-    department: "Customer Service",
-    status: "inactive",
-    lastLogin: new Date("2024-09-15T16:45:00"),
-    createdAt: new Date("2024-03-10")
-  },
-  {
-    id: "U004",
-    name: "Sarah Wilson",
-    email: "sarah.wilson@loanflow.com",
-    role: "viewer",
-    department: "Compliance",
-    status: "active", 
-    lastLogin: new Date("2024-09-18T14:20:00"),
-    createdAt: new Date("2024-04-05")
-  }
-]
 
 const userColumns: Column[] = [
   { key: "id", label: "User ID", width: "100px" },
   { key: "name", label: "Name" },
   { key: "email", label: "Email" },
+  { key: "phone_number", label: "Phone Number", width: "150px" },
   { key: "role", label: "Role", width: "120px" },
-  { key: "department", label: "Department" },
-  { key: "status", label: "Status", width: "120px" },
-  { key: "lastLogin", label: "Last Login" },
-  { key: "createdAt", label: "Created" },
+  { key: "unique_id", label: "Unique ID", width: "120px" },
+  { key: "assigned_agent_id", label: "Assigned Agent ID", width: "120px" },
+  { key: "created_at", label: "Created" },
 ]
 
 export default function ManageUserPage() {
@@ -94,6 +55,13 @@ export default function ManageUserPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    role: ''
+  })
 
   useEffect(() => {
     fetchSystemUsers()
@@ -102,10 +70,10 @@ export default function ManageUserPage() {
   const fetchSystemUsers = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/system-users')
+      const response = await fetch('/api/users')
       const data = await response.json()
       
-      if (data.success) {
+      if (data.success && data.data?.users) {
         setUsers(data.data.users)
       } else {
         setError(data.error || 'Failed to fetch system users')
@@ -141,7 +109,90 @@ export default function ManageUserPage() {
   }
 
   const handleCreateUser = () => {
+    setFormData({ name: '', email: '', phone: '', role: '' })
     setIsDialogOpen(true)
+  }
+
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-digit characters (+, -, (, ), spaces, etc.)
+    const digitsOnly = phone.replace(/\D/g, '')
+    
+    // Ensure the number is exactly 11 digits
+    if (digitsOnly.length === 11) {
+      // Check if it starts with 91 (India code)
+      if (digitsOnly.startsWith('91')) {
+        return digitsOnly
+      } else {
+        // If 11 digits but doesn't start with 91, take last 10 digits and add 91
+        return '91' + digitsOnly.slice(-10)
+      }
+    } else if (digitsOnly.length === 10) {
+      // If 10 digits, assume it's missing country code, add 91 (India)
+      return '91' + digitsOnly
+    } else if (digitsOnly.length > 11) {
+      // If more than 11 digits, take the last 11
+      return digitsOnly.slice(-11)
+    } else {
+      // If less than 10 digits, it's invalid - return as is for validation to catch
+      return digitsOnly
+    }
+  }
+
+  const handleFormChange = (field: string, value: string) => {
+    if (field === 'phone') {
+      // Format phone number in real-time
+      const formattedPhone = formatPhoneNumber(value)
+      setFormData(prev => ({ ...prev, [field]: formattedPhone }))
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }))
+    }
+  }
+
+  const handleSubmitUser = async () => {
+    if (!formData.name || !formData.email || !formData.phone || !formData.role) {
+      alert('Please fill in all fields')
+      return
+    }
+
+    // Validate phone number length
+    if (formData.phone.length !== 11) {
+      alert('Phone number must be exactly 11 digits including country code')
+      return
+    }
+
+    try {
+      setCreating(true)
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          phone_number: formData.phone,
+          role: formData.role,
+          status: 'active'
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh users list
+        await fetchSystemUsers()
+        setIsDialogOpen(false)
+        setFormData({ name: '', email: '', phone: '', role: '' })
+        console.log('User created successfully')
+      } else {
+        alert(data.error || 'Failed to create user')
+      }
+    } catch (error) {
+      console.error('Error creating user:', error)
+      alert('Failed to create user')
+    } finally {
+      setCreating(false)
+    }
   }
 
   const getRoleCounts = () => {
@@ -150,7 +201,7 @@ export default function ManageUserPage() {
       admin: users.filter(u => u.role === "admin").length,
       manager: users.filter(u => u.role === "manager").length,
       agent: users.filter(u => u.role === "agent").length,
-      viewer: users.filter(u => u.role === "viewer").length,
+      user: users.filter(u => u.role === "user").length,
     }
   }
 
@@ -189,36 +240,71 @@ export default function ManageUserPage() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" placeholder="Enter full name" />
+                  <Input 
+                    id="name" 
+                    placeholder="Enter full name"
+                    value={formData.name}
+                    onChange={(e) => handleFormChange('name', e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="Enter email address" />
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="Enter email address"
+                    value={formData.email}
+                    onChange={(e) => handleFormChange('email', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input 
+                    id="phone" 
+                    type="tel" 
+                    placeholder="e.g. +91(829)234-5678 → 91829234567"
+                    value={formData.phone}
+                    onChange={(e) => handleFormChange('phone', e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Will be formatted to 11 digits: {formData.phone || 'Enter phone number'}
+                    {formData.phone && formData.phone.length !== 11 && (
+                      <span className="text-red-500 ml-2">
+                        ({formData.phone.length}/11 digits)
+                      </span>
+                    )}
+                    {formData.phone && formData.phone.length === 11 && (
+                      <span className="text-green-500 ml-2">✓ Valid format</span>
+                    )}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">Role</Label>
-                  <Select>
+                  <Select value={formData.role} onValueChange={(value) => handleFormChange('role', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
                       <SelectItem value="agent">Agent</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
+                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Input id="department" placeholder="Enter department" />
-                </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsDialogOpen(false)}
+                    disabled={creating}
+                  >
                     Cancel
                   </Button>
-                  <Button onClick={() => setIsDialogOpen(false)}>
-                    Create User
+                  <Button 
+                    onClick={handleSubmitUser}
+                    disabled={creating || !formData.name || !formData.email || !formData.phone || !formData.role}
+                  >
+                    {creating ? 'Creating...' : 'Create User'}
                   </Button>
                 </div>
               </div>
@@ -324,7 +410,7 @@ export default function ManageUserPage() {
               <SelectItem value="admin">Admin</SelectItem>
               <SelectItem value="manager">Manager</SelectItem>
               <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="viewer">Viewer</SelectItem>
+              <SelectItem value="user">User</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -355,6 +441,7 @@ export default function ManageUserPage() {
                 <div className="text-red-500">{error}</div>
               </div>
             ) : (
+          
               <DataTable
                 columns={userColumns}
                 data={filteredUsers}

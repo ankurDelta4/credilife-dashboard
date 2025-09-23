@@ -20,7 +20,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Eye, Check, X } from "lucide-react"
+import { Eye, Check, X, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+} from "@/components/ui/pagination"
 
 // Receipt interface
 interface Receipt {
@@ -258,6 +265,8 @@ export default function Receipts() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [currentPage, setCurrentPage] = useState(1)
+    const itemsPerPage = 10
 
     useEffect(() => {
         fetchReceipts()
@@ -356,6 +365,15 @@ export default function Receipts() {
         }
     }
 
+    const totalPages = Math.ceil(receipts.length / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedReceipts = receipts.slice(startIndex, endIndex)
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page)
+    }
+
     return (
         <DashboardLayout>
             <div className="space-y-6">
@@ -375,10 +393,80 @@ export default function Receipts() {
                         <div className="text-red-500">{error}</div>
                     </div>
                 ) : (
-                    <ReceiptsTable
-                        receipts={receipts}
-                        onViewReceipt={handleViewReceipt}
-                    />
+                    <>
+                        <ReceiptsTable
+                            receipts={paginatedReceipts}
+                            onViewReceipt={handleViewReceipt}
+                        />
+                        
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between py-4">
+                                <div className="text-sm text-muted-foreground">
+                                    Showing {startIndex + 1} to {Math.min(endIndex, receipts.length)} of {receipts.length} receipts
+                                </div>
+                                
+                                <Pagination>
+                                    <PaginationContent>
+                                        <PaginationItem>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handlePageChange(currentPage - 1)}
+                                                disabled={currentPage === 1}
+                                            >
+                                                <ChevronLeft className="h-4 w-4" />
+                                                Previous
+                                            </Button>
+                                        </PaginationItem>
+                                        
+                                        {[...Array(totalPages)].map((_, index) => {
+                                            const pageNum = index + 1
+                                            if (
+                                                pageNum === 1 ||
+                                                pageNum === totalPages ||
+                                                (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                                            ) {
+                                                return (
+                                                    <PaginationItem key={pageNum}>
+                                                        <PaginationLink
+                                                            onClick={() => handlePageChange(pageNum)}
+                                                            isActive={currentPage === pageNum}
+                                                            className="cursor-pointer"
+                                                            size="icon"
+                                                        >
+                                                            {pageNum}
+                                                        </PaginationLink>
+                                                    </PaginationItem>
+                                                )
+                                            } else if (
+                                                pageNum === currentPage - 2 ||
+                                                pageNum === currentPage + 2
+                                            ) {
+                                                return (
+                                                    <PaginationItem key={pageNum}>
+                                                        <PaginationEllipsis />
+                                                    </PaginationItem>
+                                                )
+                                            }
+                                            return null
+                                        })}
+                                        
+                                        <PaginationItem>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handlePageChange(currentPage + 1)}
+                                                disabled={currentPage === totalPages}
+                                            >
+                                                Next
+                                                <ChevronRight className="h-4 w-4" />
+                                            </Button>
+                                        </PaginationItem>
+                                    </PaginationContent>
+                                </Pagination>
+                            </div>
+                        )}
+                    </>
                 )}
 
                 <ReceiptModal

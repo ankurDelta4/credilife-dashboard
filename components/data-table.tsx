@@ -64,7 +64,7 @@ export function DataTable<T = Record<string, unknown>>({ columns, data, onRowCli
     }
 
     if (key === "interestRate" && typeof value === "number") {
-      return `${value}%`
+      return `${value}`
     }
 
     if (key === "creditScore" && typeof value === "number") {

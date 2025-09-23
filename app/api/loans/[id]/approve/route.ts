@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function PATCH(
     _request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const applicationId = params.id;
+        const { id: applicationId } = await params;
         
         if (!applicationId) {
             return NextResponse.json(
@@ -59,11 +59,11 @@ export async function PATCH(
                     
                     if (updateApplicationResponse.ok) {
                         // Step 2: Create a new loan record
-                        const currentDate = new Date();
-                        const startDate = new Date(currentDate);
-                        startDate.setDate(currentDate.getDate() + 7); // Start loan 7 days from now
+                        const currentDate = new Date(); // Approval date
+                        const startDate = new Date(currentDate); // Start from approval date
                         
                         // Calculate end date based on tenure (in months)
+                        // If approved in July with 3-month tenure, end date will be October
                         const endDate = new Date(startDate);
                         const tenureMonths = parseInt(application.tenure) || 12; // Default to 12 months if not specified
                         endDate.setMonth(startDate.getMonth() + tenureMonths);

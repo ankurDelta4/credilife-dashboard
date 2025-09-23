@@ -22,14 +22,21 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, Check, X, Search, Filter } from "lucide-react"
+import { Eye, Check, X, Search, Filter, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+} from "@/components/ui/pagination"
 
 interface LoanApplication {
     id: string | number
     customerName: string
     email: string
     amount: number
-    status: "pending" | "approved" | "rejected"
+    status: "creating" | "pending" | "approved" | "rejected"
     tenure: number | string
     repaymentType: string
     submitDate: string
@@ -39,6 +46,7 @@ interface LoanApplication {
     closingFees?: number
     totalRepayment?: number
     loanPurpose?: string
+    user_data?: string
 }
 
 function LoanApplicationModal({ 
@@ -66,9 +74,164 @@ function LoanApplicationModal({
         onClose()
     }
 
+    let userData = null
+    console.log('Application data:', application)
+    console.log('User data string:', application.user_data)
+    
+    if (application.user_data) {
+        try {
+            userData = JSON.parse(application.user_data)
+            console.log('Parsed user data:', userData)
+        } catch (e) {
+            console.error('Failed to parse user_data:', e)
+            console.error('Raw user_data:', application.user_data)
+        }
+    } else {
+        console.log('No user_data field in application')
+    }
+
+    const formatFieldName = (fieldName: string) => {
+        return fieldName
+            .replace(/_/g, ' ')
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ')
+    }
+
+    const isURL = (str: string) => {
+        if (!str || typeof str !== 'string') return false
+        try {
+            new URL(str)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    const isImageOrFileField = (fieldName: string) => {
+        const linkOnlyFields = ['business_insta', 'company_site']
+        return !linkOnlyFields.includes(fieldName)
+    }
+
+    const handleDownload = async (url: string, fileName: string) => {
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                },
+            })
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch file')
+            }
+            
+            const blob = await response.blob()
+            const downloadUrl = window.URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = downloadUrl
+            link.download = fileName || 'download'
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            window.URL.revokeObjectURL(downloadUrl)
+        } catch (error) {
+            console.error('Download failed:', error)
+            // Fallback to opening in new tab
+            window.open(url, '_blank')
+        }
+    }
+
+    const renderFieldValue = (key: string, value: any) => {
+        const stringValue = String(value)
+        
+        if (value === null || value === '') {
+            return <span className="text-gray-500">N/A</span>
+        }
+        
+        if (typeof value === 'object') {
+            return <pre className="text-xs bg-gray-100 p-2 rounded">{JSON.stringify(value, null, 2)}</pre>
+        }
+        
+        if (isURL(stringValue)) {
+            if (isImageOrFileField(key)) {
+                // Image/file field - show download button
+                return (
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDownload(stringValue, `${key}_${application.id}`)}
+                            className="flex items-center gap-1"
+                        >
+                            <Download className="h-3 w-3" />
+                            Download
+                        </Button>
+                        {/* <span className="text-xs text-gray-500 truncate max-w-32" title={stringValue}>
+                            {stringValue}
+                        </span> */}
+                    </div>
+                )
+            } else {
+                // Business/company links - show external link
+                return (
+                    <div className="flex items-center gap-2">
+                        <a
+                            href={stringValue}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                            <ExternalLink className="h-3 w-3" />
+                            Visit Link
+                        </a>
+                        {/* <span className="text-xs text-gray-500 truncate max-w-32" title={stringValue}>
+                            {stringValue}
+                        </span> */}
+                    </div>
+                )
+            }
+        }
+        
+        return <span className="text-gray-900">{stringValue}</span>
+    }
+
+    const userDataFieldOrder = [
+        "first_name",
+        "last_name",
+        "whatsapp_number",
+        "id_number",
+        "id_card_front",
+        "email",
+        "address",
+        "province",
+        "house_type",
+        "maratial_status",
+        "partner_name",
+        "children_count",
+        "family_reference",
+        "personal_reference",
+        "employment_status",
+        "company_name",
+        "company_number",
+        "hr_email",
+        "company_site",
+        "company_address",
+        "occupation",
+        "living_time_at_address",
+        "application_id",
+        "supervisor_name",
+        "time_in_company",
+        "company_payment_method",
+        "monthly_income",
+        "month_end_saving",
+        "payment_date"
+      ];
+      
+
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Loan Application Review</DialogTitle>
                     <DialogDescription>
@@ -77,50 +240,95 @@ function LoanApplicationModal({
                 </DialogHeader>
 
                 <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <span className="font-medium">Customer Name:</span> {application.customerName}
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                        <h3 className="font-semibold mb-3 text-blue-900">Application Details</h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <span className="font-medium">Application ID:</span> {application.id}
+                            </div>
+                            <div>
+                                <span className="font-medium">Status:</span>
+                                <Badge className={`ml-2 ${
+                                    application.status === "creating" ? "bg-blue-100 text-blue-800" :
+                                    application.status === "pending" ? "bg-yellow-100 text-yellow-800" :
+                                    application.status === "approved" ? "bg-green-100 text-green-800" :
+                                    application.status === "rejected" ? "bg-red-100 text-red-800" :
+                                    "bg-gray-100 text-gray-800"
+                                }`}>
+                                    {application.status}
+                                </Badge>
+                            </div>
+                            <div>
+                                <span className="font-medium">Requested Amount:</span> ${application.amount.toLocaleString()}
+                            </div>
+                            <div>
+                                <span className="font-medium">Submit Date:</span> {new Date(application.submitDate).toLocaleDateString('en-US')}
+                            </div>
+                            <div>
+                                <span className="font-medium">Principal Amount:</span> ${(application.principalAmount || application.amount).toLocaleString()}
+                            </div>
+                            <div>
+                                <span className="font-medium">Interest Amount:</span> ${(application.interestAmount || 0).toLocaleString()}
+                            </div>
+                            <div>
+                                <span className="font-medium">Closing Fees:</span> ${(application.closingFees || 0).toLocaleString()}
+                            </div>
+                            <div>
+                                <span className="font-medium">Total Repayment:</span> ${(application.totalRepayment || 0).toLocaleString()}
+                            </div>
+                            <div>
+                                <span className="font-medium">Tenure:</span> {application.tenure || 'N/A'} {application.tenure ? 'months' : ''}
+                            </div>
+                            <div>
+                                <span className="font-medium">Repayment Type:</span> {application.repaymentType || 'N/A'}
+                            </div>
+                            <div>
+                                <span className="font-medium">Current Stage:</span> {application.currentStage || 'N/A'}
+                            </div>
+                            <div>
+                                <span className="font-medium">Loan Purpose:</span> {application.loanPurpose || 'N/A'}
+                            </div>
                         </div>
-                        <div>
-                            <span className="font-medium">Email:</span> {application.email}
-                        </div>
-                        <div>
-                            <span className="font-medium">Requested Amount:</span> ${application.amount.toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Principal Amount:</span> ${(application.principalAmount || application.amount).toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Interest Amount:</span> ${(application.interestAmount || 0).toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Closing Fees:</span> ${(application.closingFees || 0).toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Total Repayment:</span> ${(application.totalRepayment || 0).toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Tenure:</span> {application.tenure} months
-                        </div>
-                        <div>
-                            <span className="font-medium">Repayment Type:</span> {application.repaymentType || 'N/A'}
-                        </div>
-                        <div>
-                            <span className="font-medium">Current Stage:</span> {application.currentStage || 'N/A'}
-                        </div>
-                        <div>
-                            <span className="font-medium">Submit Date:</span> {new Date(application.submitDate).toLocaleDateString('en-US')}
-                        </div>
-                        <div>
-                            <span className="font-medium">Status:</span>
-                            <Badge className={`ml-2 ${
-                                application.status === "approved" ? "bg-green-100 text-green-800" :
-                                application.status === "rejected" ? "bg-red-100 text-red-800" :
-                                "bg-yellow-100 text-yellow-800"
-                            }`}>
-                                {application.status}
-                            </Badge>
-                        </div>
+                    </div>
+
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                        <h3 className="font-semibold mb-3 text-gray-900">Applicant Information</h3>
+                        {userData ? (
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                {userDataFieldOrder
+                                    .filter(key => key in userData)
+                                    .map((key) => {
+                                        const value = userData[key]
+                                        return (
+                                            <div key={key} className="flex flex-col">
+                                                <span className="font-medium text-gray-600">
+                                                    {formatFieldName(key)}:
+                                                </span>
+                                                <div className="mt-1">
+                                                    {renderFieldValue(key, value)}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                {Object.entries(userData)
+                                    .filter(([key]) => !userDataFieldOrder.includes(key))
+                                    .map(([key, value]) => (
+                                        <div key={key} className="flex flex-col">
+                                            <span className="font-medium text-gray-600">
+                                                {formatFieldName(key)}:
+                                            </span>
+                                            <div className="mt-1">
+                                                {renderFieldValue(key, value)}
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        ) : (
+                            <div className="text-sm text-gray-500">
+                                No additional applicant information available. 
+                                {!application.user_data}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -176,9 +384,10 @@ function LoanApplicationsTable({
 
     const getStatusBadge = (status: string) => {
         const statusColors = {
+            creating: "bg-blue-100 text-blue-800",
+            pending: "bg-yellow-100 text-yellow-800",
             approved: "bg-green-100 text-green-800",
             rejected: "bg-red-100 text-red-800",
-            pending: "bg-yellow-100 text-yellow-800",
         }
         return (
             <Badge className={statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800"}>
@@ -250,6 +459,8 @@ export default function LoanApplicationsPage() {
     const [error, setError] = useState<string | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
+    const [currentPage, setCurrentPage] = useState(1)
+    const itemsPerPage = 10
 
     useEffect(() => {
         fetchApplications()
@@ -282,6 +493,19 @@ export default function LoanApplicationsPage() {
 
         return matchesSearch && matchesStatus
     })
+
+    const totalPages = Math.ceil(filteredApplications.length / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const paginatedApplications = filteredApplications.slice(startIndex, endIndex)
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page)
+    }
+
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [searchTerm, statusFilter])
 
     const handleViewApplication = (application: LoanApplication) => {
         setSelectedApplication(application)
@@ -358,6 +582,7 @@ export default function LoanApplicationsPage() {
     const getStatusCounts = () => {
         return {
             all: applications.length,
+            creating: applications.filter(app => app.status === "creating").length,
             pending: applications.filter(app => app.status === "pending").length,
             approved: applications.filter(app => app.status === "approved").length,
             rejected: applications.filter(app => app.status === "rejected").length,
@@ -376,17 +601,28 @@ export default function LoanApplicationsPage() {
                     </p>
                 </div>
 
-                <div className="flex flex-wrap gap-4">
-                    {Object.entries(statusCounts).map(([status, count]) => (
-                        <Badge
-                            key={status}
-                            variant={statusFilter === status ? "default" : "secondary"}
-                            className="cursor-pointer capitalize"
-                            onClick={() => setStatusFilter(status)}
-                        >
-                            {status.replace("_", " ")}: {count}
-                        </Badge>
-                    ))}
+                <div className="flex flex-wrap gap-2">
+                    {Object.entries(statusCounts).map(([status, count]) => {
+                        const isActive = statusFilter === status
+                        const statusStyles = {
+                            all: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
+                            creating: isActive ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700 hover:bg-blue-200",
+                            pending: isActive ? "bg-yellow-600 text-white" : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200",
+                            approved: isActive ? "bg-green-600 text-white" : "bg-green-100 text-green-700 hover:bg-green-200",
+                            rejected: isActive ? "bg-red-600 text-white" : "bg-red-100 text-red-700 hover:bg-red-200",
+                        }
+                        return (
+                            <button
+                                key={status}
+                                onClick={() => setStatusFilter(status)}
+                                className={`px-4 py-2 rounded-full font-medium text-sm transition-colors ${
+                                    statusStyles[status as keyof typeof statusStyles]
+                                }`}
+                            >
+                                {status === "all" ? "All" : status.charAt(0).toUpperCase() + status.slice(1)} ({count})
+                            </button>
+                        )
+                    })}
                 </div>
 
                 <div className="flex gap-4">
@@ -406,6 +642,7 @@ export default function LoanApplicationsPage() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="creating">Creating</SelectItem>
                             <SelectItem value="pending">Pending</SelectItem>
                             <SelectItem value="approved">Approved</SelectItem>
                             <SelectItem value="rejected">Rejected</SelectItem>
@@ -422,10 +659,80 @@ export default function LoanApplicationsPage() {
                         <div className="text-red-500">{error}</div>
                     </div>
                 ) : (
-                    <LoanApplicationsTable
-                        applications={filteredApplications}
-                        onViewApplication={handleViewApplication}
-                    />
+                    <>
+                        <LoanApplicationsTable
+                            applications={paginatedApplications}
+                            onViewApplication={handleViewApplication}
+                        />
+                        
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-between py-4">
+                                <div className="text-sm text-muted-foreground">
+                                    Showing {startIndex + 1} to {Math.min(endIndex, filteredApplications.length)} of {filteredApplications.length} applications
+                                </div>
+                                
+                                <Pagination>
+                                    <PaginationContent>
+                                        <PaginationItem>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handlePageChange(currentPage - 1)}
+                                                disabled={currentPage === 1}
+                                            >
+                                                <ChevronLeft className="h-4 w-4" />
+                                                Previous
+                                            </Button>
+                                        </PaginationItem>
+                                        
+                                        {[...Array(totalPages)].map((_, index) => {
+                                            const pageNum = index + 1
+                                            if (
+                                                pageNum === 1 ||
+                                                pageNum === totalPages ||
+                                                (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                                            ) {
+                                                return (
+                                                    <PaginationItem key={pageNum}>
+                                                        <PaginationLink
+                                                            onClick={() => handlePageChange(pageNum)}
+                                                            isActive={currentPage === pageNum}
+                                                            className="cursor-pointer"
+                                                            size="icon"
+                                                        >
+                                                            {pageNum}
+                                                        </PaginationLink>
+                                                    </PaginationItem>
+                                                )
+                                            } else if (
+                                                pageNum === currentPage - 2 ||
+                                                pageNum === currentPage + 2
+                                            ) {
+                                                return (
+                                                    <PaginationItem key={pageNum}>
+                                                        <PaginationEllipsis />
+                                                    </PaginationItem>
+                                                )
+                                            }
+                                            return null
+                                        })}
+                                        
+                                        <PaginationItem>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handlePageChange(currentPage + 1)}
+                                                disabled={currentPage === totalPages}
+                                            >
+                                                Next
+                                                <ChevronRight className="h-4 w-4" />
+                                            </Button>
+                                        </PaginationItem>
+                                    </PaginationContent>
+                                </Pagination>
+                            </div>
+                        )}
+                    </>
                 )}
 
                 <LoanApplicationModal

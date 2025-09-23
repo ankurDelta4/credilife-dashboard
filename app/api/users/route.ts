@@ -6,6 +6,7 @@ let users = [
         id: 1,
         name: 'John Doe',
         email: 'john@example.com',
+        phone_number: '+1-555-0101',
         role: 'admin',
         status: 'active',
         createdAt: '2024-01-15T10:30:00Z'
@@ -14,6 +15,7 @@ let users = [
         id: 2,
         name: 'Jane Smith',
         email: 'jane@example.com',
+        phone_number: '+1-555-0102',
         role: 'user',
         status: 'active',
         createdAt: '2024-01-16T14:20:00Z'
@@ -22,6 +24,7 @@ let users = [
         id: 3,
         name: 'Bob Johnson',
         email: 'bob@example.com',
+        phone_number: '+1-555-0103',
         role: 'user',
         status: 'inactive',
         createdAt: '2024-01-17T09:15:00Z'
@@ -60,8 +63,8 @@ export async function GET(request: NextRequest) {
 
         const backendData = await backendResponse.json();
         console.log("Backend data", backendData)
-        // If backend doesn't return paginated data, use mock data as fallback
-        if (!backendData || backendData.length === 0) {
+        // If backend doesn't return data, use mock data as fallback
+        if (!backendData || (!Array.isArray(backendData) && backendData.length === 0)) {
             // Fallback to mock data
             let filteredUsers = users;
 
@@ -95,15 +98,18 @@ export async function GET(request: NextRequest) {
             });
         }
 
+        // Supabase returns an array directly
+        const users = Array.isArray(backendData) ? backendData : [];
+        
         return NextResponse.json({
             success: true,
             data: {
-                users: backendData.users || backendData.data?.users || backendData,
-                pagination: backendData.pagination || {
+                users: users,
+                pagination: {
                     page,
                     limit,
-                    total: backendData.total || backendData.users?.length || 0,
-                    totalPages: Math.ceil((backendData.total || backendData.users?.length || 0) / limit)
+                    total: users.length,
+                    totalPages: Math.ceil(users.length / limit)
                 }
             },
             message: 'Users retrieved successfully'
@@ -124,21 +130,76 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { name, email, role = 'user', status = 'active' } = body;
+        const { name, email, phone_number, role = 'user', status = 'active' } = body;
 
         // Validation
-        if (!name || !email) {
+        console.log(body)
+        if (!name || !email || !phone_number || !role) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: 'Name and email are required',
+                    error: 'Name, email, phone, and role are required',
                     code: 'MISSING_FIELDS'
                 },
                 { status: 400 }
             );
         }
 
-        // Check if email already exists
+        // Try to create user in Supabase first
+        const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
+        
+        try {
+            console.log('Creating user with data:', { name, email, phone_number, role, status });
+            
+            const backendResponse = await fetch(`${backendUrl}/users`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': `${process.env.API_KEY || ''}`,
+                    'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify({
+                    name,
+                    email,
+                    phone_number,
+                    role,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+            });
+
+            console.log(`Backend response status: ${backendResponse.status}`);
+            
+            if (backendResponse.ok) {
+                const createdUser = await backendResponse.json();
+                console.log('User created successfully in backend:', createdUser);
+                return NextResponse.json({
+                    success: true,
+                    data: { user: Array.isArray(createdUser) ? createdUser[0] : createdUser },
+                    message: 'User created successfully'
+                }, { status: 201 });
+            } else {
+                const errorData = await backendResponse.text();
+                console.log('Backend error response:', errorData);
+                
+                // Check if it's a duplicate email error
+                if (backendResponse.status === 409 || errorData.includes('duplicate') || errorData.includes('unique')) {
+                    return NextResponse.json(
+                        {
+                            success: false,
+                            error: 'Email already exists',
+                            code: 'EMAIL_EXISTS'
+                        },
+                        { status: 409 }
+                    );
+                }
+            }
+        } catch (backendError) {
+            console.log("Backend creation error:", backendError);
+        }
+
+        // Fallback to local creation if backend fails
         const existingUser = users.find(u => u.email === email);
         if (existingUser) {
             return NextResponse.json(
@@ -151,11 +212,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create new user
         const newUser = {
             id: Math.max(...users.map(u => u.id)) + 1,
             name,
             email,
+            phone_number,
             role,
             status,
             createdAt: new Date().toISOString()
@@ -166,10 +227,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             data: { user: newUser },
-            message: 'User created successfully'
+            message: 'User created successfully (fallback)'
         }, { status: 201 });
 
     } catch (error) {
+        console.error('Error creating user:', error);
         return NextResponse.json(
             {
                 success: false,

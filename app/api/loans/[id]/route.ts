@@ -42,13 +42,12 @@ let loans = [
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = params;
-        const loanId = parseInt(id);
+        const { id } = await params;
 
-        if (isNaN(loanId)) {
+        if (!id) {
             return NextResponse.json(
                 {
                     success: false,
@@ -59,9 +58,31 @@ export async function GET(
             );
         }
 
-        const loan = loans.find(l => l.id === loanId);
+        // Fetch loan data from Supabase
+        const supabaseUrl = `https://axjfqvdhphkugutkovam.supabase.co/rest/v1/loans?id=eq.${id}&select=*,installments(*)`;
+        
+        const response = await fetch(supabaseUrl, {
+            headers: {
+                'apikey': process.env.API_KEY || '',
+                'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                'Content-Type': 'application/json'
+            }
+        });
 
-        if (!loan) {
+        if (!response.ok) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'Failed to fetch loan data',
+                    code: 'SUPABASE_ERROR'
+                },
+                { status: response.status }
+            );
+        }
+
+        const data = await response.json();
+        console.log("LOAN:" ,data, data[0].installments,data.length)
+        if ( data.length === 0) {
             return NextResponse.json(
                 {
                     success: false,
@@ -72,6 +93,8 @@ export async function GET(
             );
         }
 
+        const loan = data[0]; // Supabase returns an array
+
         return NextResponse.json({
             success: true,
             data: { loan },
@@ -79,6 +102,7 @@ export async function GET(
         });
 
     } catch (error) {
+        console.error('Error fetching loan:', error);
         return NextResponse.json(
             {
                 success: false,
@@ -92,14 +116,13 @@ export async function GET(
 
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = params;
-        const loanId = parseInt(id);
+        const { id } = await params;
         const body = await request.json();
 
-        if (isNaN(loanId)) {
+        if (!id) {
             return NextResponse.json(
                 {
                     success: false,
@@ -110,7 +133,7 @@ export async function PUT(
             );
         }
 
-        const loanIndex = loans.findIndex(l => l.id === loanId);
+        const loanIndex = loans.findIndex(l => l.id.toString() === id);
 
         if (loanIndex === -1) {
             return NextResponse.json(
@@ -127,7 +150,7 @@ export async function PUT(
         const updatedLoan = {
             ...loans[loanIndex],
             ...body,
-            id: loanId, // Ensure ID doesn't change
+            id: loans[loanIndex].id, // Ensure ID doesn't change
             createdAt: loans[loanIndex].createdAt, // Preserve creation date
             updatedAt: new Date().toISOString()
         };
@@ -154,13 +177,12 @@ export async function PUT(
 
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = params;
-        const loanId = parseInt(id);
+        const { id } = await params;
 
-        if (isNaN(loanId)) {
+        if (!id) {
             return NextResponse.json(
                 {
                     success: false,
@@ -171,7 +193,7 @@ export async function DELETE(
             );
         }
 
-        const loanIndex = loans.findIndex(l => l.id === loanId);
+        const loanIndex = loans.findIndex(l => l.id.toString() === id);
 
         if (loanIndex === -1) {
             return NextResponse.json(
