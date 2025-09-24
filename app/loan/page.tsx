@@ -78,7 +78,17 @@ export default function LoanPage() {
   const filteredLoans = loans.filter((loan) => {
     const matchesSearch = loan.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       loan.id.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || loan.status === statusFilter
+    
+    let matchesStatus = false
+    if (statusFilter === "all") {
+      matchesStatus = true
+    } else if (statusFilter === "running") {
+      matchesStatus = loan.status === "running" || loan.status === "active"
+    } else if (statusFilter === "completed") {
+      matchesStatus = loan.status === "completed" || loan.status === "settled"
+    } else {
+      matchesStatus = loan.status === statusFilter
+    }
 
     return matchesSearch && matchesStatus
   })
@@ -115,11 +125,9 @@ export default function LoanPage() {
   const getStatusCounts = () => {
     return {
       all: loans.length,
-      active: loans.filter(l => l.status === "active").length,
-      pending: loans.filter(l => l.status === "pending").length,
-      overdue: loans.filter(l => l.status === "overdue").length,
-      completed: loans.filter(l => l.status === "completed").length,
-      rejected: loans.filter(l => l.status === "rejected").length,
+      running: loans.filter(l => l.status === "running" || l.status === "active").length,
+      completed: loans.filter(l => l.status === "completed" || l.status === "settled").length,
+      terminated: loans.filter(l => l.status === "terminated").length,
     }
   }
 
@@ -171,11 +179,9 @@ export default function LoanPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="running">Running</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="terminated">Terminated</SelectItem>
             </SelectContent>
           </Select>
         </div>

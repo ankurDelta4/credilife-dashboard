@@ -74,7 +74,7 @@ export async function PATCH(
                             principal_amount: parseFloat(application.principal_amount) || parseFloat(application.requested_amount) || 0,
                             start_date: startDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
                             end_date: endDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
-                            status: 'active',
+                            status: 'running',
                             assigned_agent_id: null,
                             interest_amount: parseFloat(application.interest_amount) || null,
                             closing_fees: parseFloat(application.closing_fees) || null,

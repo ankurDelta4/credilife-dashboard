@@ -102,12 +102,12 @@ function ReceiptModal({ receipt, isOpen, onClose, onApprove, onReject }: Receipt
     if (!receipt) return null
 
     const handleApprove = () => {
-        onApprove(receipt.id)
+        onApprove(String(receipt.id))
         onClose()
     }
 
     const handleReject = () => {
-        onReject(receipt.id)
+        onReject(String(receipt.id))
         onClose()
     }
 

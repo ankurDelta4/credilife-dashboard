@@ -17,13 +17,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Fetch user from Supabase
+        // Fetch staff from Supabase staff table
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
         
         try {
-            console.log('Attempting login for:', { email });
+            console.log('Attempting staff login for:', { email });
             
-            const response = await fetch(`${backendUrl}/users?email=eq.${encodeURIComponent(email)}&select=*`, {
+            const response = await fetch(`${backendUrl}/staff?email=eq.${encodeURIComponent(email)}&password=eq.${encodeURIComponent(password)}&select=id,name,email,role`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -33,31 +33,20 @@ export async function POST(request: NextRequest) {
             });
 
             if (response.ok) {
-                const users = await response.json();
-                console.log('Users found:', users.length);
+                const staff = await response.json();
+                console.log('Staff found:', staff.length);
                 
-                if (users && Array.isArray(users) && users.length > 0) {
-                    const user = users[0];
-                    console.log('User data:', { id: user.id, email: user.email, role: user.role });
+                if (staff && Array.isArray(staff) && staff.length > 0) {
+                    const user = staff[0];
+                    console.log('Staff data:', { id: user.id, email: user.email, role: user.role });
                     
-                    // Verify password
-                    if (user.password !== password) {
+                    // No need to verify password as it's already filtered by the API
+                    // Check if user has staff privileges (admin, manager, or agent)
+                    if (!['admin', 'manager', 'agent'].includes(user.role)) {
                         return NextResponse.json(
                             {
                                 success: false,
-                                error: 'Invalid credentials. Incorrect password.',
-                                code: 'INVALID_PASSWORD'
-                            },
-                            { status: 401 }
-                        );
-                    }
-                    
-                    // Check if user has admin role
-                    if (user.role !== 'admin') {
-                        return NextResponse.json(
-                            {
-                                success: false,
-                                error: 'Access denied. Admin privileges required.',
+                                error: 'Access denied. Staff privileges required.',
                                 code: 'INSUFFICIENT_PRIVILEGES'
                             },
                             { status: 403 }
@@ -74,7 +63,6 @@ export async function POST(request: NextRequest) {
                                 id: user.id,
                                 name: user.name,
                                 email: user.email,
-                                phone_number: user.phone_number,
                                 role: user.role
                             },
                             token
@@ -85,7 +73,7 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json(
                         {
                             success: false,
-                            error: 'Invalid credentials. User not found with provided email.',
+                            error: 'Invalid credentials. Staff not found or incorrect password.',
                             code: 'INVALID_CREDENTIALS'
                         },
                         { status: 401 }

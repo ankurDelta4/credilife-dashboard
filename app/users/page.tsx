@@ -6,16 +6,16 @@ import { DataTable, Column } from "@/components/data-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Plus, Search, ChevronLeft, ChevronRight } from "lucide-react"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
-import { Plus, Search, ChevronLeft, ChevronRight, Settings } from "lucide-react"
 import {
     Pagination,
     PaginationContent,
@@ -47,30 +47,15 @@ interface User {
 }
 
 function UsersTable({ 
-  users, 
-  onChangeRole 
+  users 
 }: {
   users: User[]
-  onChangeRole: (user: User) => void
 }) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
     }).format(amount)
-  }
-
-  const getStatusBadge = (status: string) => {
-    const statusColors = {
-      active: "bg-green-100 text-green-800",
-      inactive: "bg-gray-100 text-gray-800",
-      suspended: "bg-red-100 text-red-800",
-    }
-    return (
-      <Badge className={statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800"}>
-        {status}
-      </Badge>
-    )
   }
 
   const getRoleBadge = (role: string) => {
@@ -98,16 +83,14 @@ function UsersTable({
             <TableHead>Phone Number</TableHead>
             <TableHead>Unique ID</TableHead>
             <TableHead>Total Loans</TableHead>
-            <TableHead>Status</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Join Date</TableHead>
-            <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {users.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10} className="h-24 text-center">
+              <TableCell colSpan={8} className="h-24 text-center">
                 No customers found.
               </TableCell>
             </TableRow>
@@ -120,20 +103,8 @@ function UsersTable({
                 <TableCell>{user.phone_number || 'N/A'}</TableCell>
                 <TableCell>{user.unique_id || 'N/A'}</TableCell>
                 <TableCell>{user.totalLoans || 0}</TableCell>
-                <TableCell>{getStatusBadge(user.status)}</TableCell>
                 <TableCell>{getRoleBadge(user.role)}</TableCell>
                 <TableCell>{user.created_at ? new Date(user.created_at).toLocaleDateString('en-US') : user.createdAt}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onChangeRole(user)}
-                    className="flex items-center gap-2"
-                  >
-                    <Settings className="h-4 w-4" />
-                    Change Role
-                  </Button>
-                </TableCell>
               </TableRow>
             ))
           )}
@@ -149,10 +120,14 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
-  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false)
-  const [newRole, setNewRole] = useState("")
-  const [updating, setUpdating] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    role: 'user'
+  })
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -168,7 +143,9 @@ export default function UsersPage() {
       
       if (data.success && data.data?.users) {
         console.log("Fetch users data", data)
-        setUsers(data.data.users || [])
+        // Filter to show only customers (users with role='user')
+        const customers = data.data.users.filter((user: User) => user.role === 'user')
+        setUsers(customers)
       } else {
         setError(data.error || 'Failed to fetch users')
       }
@@ -199,63 +176,92 @@ export default function UsersPage() {
     setCurrentPage(1)
   }, [searchTerm])
 
-  const handleViewUser = (user: unknown) => {
-    console.log("View user:", user)
+
+  const handleNewUser = () => {
+    setFormData({ name: '', email: '', phone: '', role: 'user' })
+    setIsDialogOpen(true)
   }
 
-  const handleEditUser = (user: unknown) => {
-    console.log("Edit user:", user)
-  }
-
-  const handleDeleteUser = (user: unknown) => {
-    console.log("Delete user:", user)
-  }
-
-  const handleChangeRole = (user: User) => {
-    setSelectedUser(user)
-    setNewRole(user.role)
-    setIsRoleModalOpen(true)
-  }
-
-  const handleRoleUpdate = async () => {
-    if (!selectedUser) return
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-digit characters (+, -, (, ), spaces, etc.)
+    const digitsOnly = phone.replace(/\D/g, '')
     
+    // Ensure the number is exactly 11 digits
+    if (digitsOnly.length === 11) {
+      // Check if it starts with 91 (India code)
+      if (digitsOnly.startsWith('91')) {
+        return digitsOnly
+      } else {
+        // If 11 digits but doesn't start with 91, take last 10 digits and add 91
+        return '91' + digitsOnly.slice(-10)
+      }
+    } else if (digitsOnly.length === 10) {
+      // If 10 digits, assume it's missing country code, add 91 (India)
+      return '91' + digitsOnly
+    } else if (digitsOnly.length > 11) {
+      // If more than 11 digits, take the last 11
+      return digitsOnly.slice(-11)
+    } else {
+      // If less than 10 digits, it's invalid - return as is for validation to catch
+      return digitsOnly
+    }
+  }
+
+  const handleFormChange = (field: string, value: string) => {
+    if (field === 'phone') {
+      // Format phone number in real-time
+      const formattedPhone = formatPhoneNumber(value)
+      setFormData(prev => ({ ...prev, [field]: formattedPhone }))
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }))
+    }
+  }
+
+  const handleSubmitUser = async () => {
+    if (!formData.name || !formData.email || !formData.phone) {
+      alert('Please fill in all required fields')
+      return
+    }
+
+    // Validate phone number length
+    if (formData.phone.length !== 11) {
+      alert('Phone number must be exactly 11 digits including country code')
+      return
+    }
+
     try {
-      setUpdating(true)
-      const response = await fetch(`/api/users/${selectedUser.id}`, {
-        method: 'PATCH',
+      setCreating(true)
+      const response = await fetch('/api/users', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          role: newRole
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          phone_number: formData.phone,
+          role: 'user',
+          status: 'active'
         })
       })
 
       const data = await response.json()
 
       if (data.success) {
-        // Update local state
-        setUsers(prev => prev.map(user => 
-          user.id === selectedUser.id 
-            ? { ...user, role: newRole }
-            : user
-        ))
-        setIsRoleModalOpen(false)
-        setSelectedUser(null)
-        console.log("Role updated successfully")
+        // Refresh users list
+        await fetchUsers()
+        setIsDialogOpen(false)
+        setFormData({ name: '', email: '', phone: '', role: 'user' })
+        console.log('Customer created successfully')
       } else {
-        console.error("Failed to update role:", data.error)
+        alert(data.error || 'Failed to create customer')
       }
     } catch (error) {
-      console.error("Error updating role:", error)
+      console.error('Error creating customer:', error)
+      alert('Failed to create customer')
     } finally {
-      setUpdating(false)
+      setCreating(false)
     }
-  }
-
-  const handleNewUser = () => {
-    console.log("Create new customer")
   }
 
   return (
@@ -268,10 +274,76 @@ export default function UsersPage() {
               Manage customer information and loan histories.
             </p>
           </div>
-          <Button onClick={handleNewUser}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Customer
-          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={handleNewUser}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Customer
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Customer</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input 
+                    id="name" 
+                    placeholder="Enter full name"
+                    value={formData.name}
+                    onChange={(e) => handleFormChange('name', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="Enter email address"
+                    value={formData.email}
+                    onChange={(e) => handleFormChange('email', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input 
+                    id="phone" 
+                    type="tel" 
+                    placeholder="e.g. +91(829)234-5678 → 91829234567"
+                    value={formData.phone}
+                    onChange={(e) => handleFormChange('phone', e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Will be formatted to 11 digits: {formData.phone || 'Enter phone number'}
+                    {formData.phone && formData.phone.length !== 11 && (
+                      <span className="text-red-500 ml-2">
+                        ({formData.phone.length}/11 digits)
+                      </span>
+                    )}
+                    {formData.phone && formData.phone.length === 11 && (
+                      <span className="text-green-500 ml-2">✓ Valid format</span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsDialogOpen(false)}
+                    disabled={creating}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSubmitUser}
+                    disabled={creating || !formData.name || !formData.email || !formData.phone}
+                  >
+                    {creating ? 'Creating...' : 'Create Customer'}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="flex gap-4">
@@ -303,7 +375,6 @@ export default function UsersPage() {
               <>
                 <UsersTable
                   users={paginatedUsers}
-                  onChangeRole={handleChangeRole}
                 />
                 
                 {totalPages > 1 && (
@@ -377,51 +448,6 @@ export default function UsersPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Role Change Modal */}
-        <Dialog open={isRoleModalOpen} onOpenChange={setIsRoleModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Change Customer Role</DialogTitle>
-              <DialogDescription>
-                Update the role for {selectedUser?.name}
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Select Role:</label>
-                <Select value={newRole} onValueChange={setNewRole}>
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Select a role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="agent">Agent</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => setIsRoleModalOpen(false)}
-                disabled={updating}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleRoleUpdate}
-                disabled={updating || !newRole}
-              >
-                {updating ? "Updating..." : "Update Role"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   )

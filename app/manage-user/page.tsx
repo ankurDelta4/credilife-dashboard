@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { DataTable, Column } from "@/components/data-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,12 +13,22 @@ import {
   Plus, 
   Search, 
   Filter, 
-  UserPlus, 
   Users, 
   Shield, 
-  UserCheck,
-  UserX
+  Settings
 } from "lucide-react"
+import {
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 interface SystemUser {
   id: number
@@ -36,22 +45,85 @@ interface SystemUser {
 }
 
 
-const userColumns: Column[] = [
-  { key: "id", label: "User ID", width: "100px" },
-  { key: "name", label: "Name" },
-  { key: "email", label: "Email" },
-  { key: "phone_number", label: "Phone Number", width: "150px" },
-  { key: "role", label: "Role", width: "120px" },
-  { key: "unique_id", label: "Unique ID", width: "120px" },
-  { key: "assigned_agent_id", label: "Assigned Agent ID", width: "120px" },
-  { key: "created_at", label: "Created" },
-]
+// Custom Staff Table Component
+function StaffTable({ 
+  users, 
+  onChangeRole 
+}: {
+  users: SystemUser[]
+  onChangeRole: (user: SystemUser) => void
+}) {
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Staff ID</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Phone Number</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Created</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {users.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="h-24 text-center">
+                No staff members found.
+              </TableCell>
+            </TableRow>
+          ) : (
+            users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="font-medium">{user.id}</TableCell>
+                <TableCell>{user.name}</TableCell>
+                <TableCell className="text-blue-600">{user.email}</TableCell>
+                <TableCell>{user.phone_number || user.phone || 'N/A'}</TableCell>
+                <TableCell>
+                  <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
+                </TableCell>
+                <TableCell>
+                  {user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  }) : user.createdAt || 'N/A'}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onChangeRole(user)}
+                    className="flex items-center gap-2"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Change Role
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
 
-export default function ManageUserPage() {
+const getRoleColor = (role: string) => {
+  const roleColors = {
+    admin: "bg-purple-100 text-purple-800",
+    manager: "bg-blue-100 text-blue-800",
+    agent: "bg-green-100 text-green-800",
+  }
+  return roleColors[role as keyof typeof roleColors] || "bg-gray-100 text-gray-800"
+}
+
+export default function ManageStaffPage() {
   const [users, setUsers] = useState<SystemUser[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,8 +132,13 @@ export default function ManageUserPage() {
     name: '',
     email: '',
     phone: '',
+    password: '',
     role: ''
   })
+  const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null)
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false)
+  const [newRole, setNewRole] = useState('')
+  const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
     fetchSystemUsers()
@@ -70,17 +147,19 @@ export default function ManageUserPage() {
   const fetchSystemUsers = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/users')
+      // Use local staff API endpoint
+      const response = await fetch('/api/staff')
       const data = await response.json()
       
       if (data.success && data.data?.users) {
-        setUsers(data.data.users)
+        console.log('Staff data fetched:', data.data.users.length)
+        setUsers(data.data.users || [])
       } else {
-        setError(data.error || 'Failed to fetch system users')
+        setError(data.error || 'Failed to fetch staff data')
       }
     } catch (err) {
-      setError('Failed to fetch system users')
-      console.error('Error fetching system users:', err)
+      setError('Failed to fetch staff data')
+      console.error('Error fetching staff:', err)
     } finally {
       setLoading(false)
     }
@@ -91,25 +170,52 @@ export default function ManageUserPage() {
                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.id.toString().toLowerCase().includes(searchTerm.toLowerCase())
     const matchesRole = roleFilter === "all" || user.role === roleFilter
-    const matchesStatus = statusFilter === "all" || user.status === statusFilter
     
-    return matchesSearch && matchesRole && matchesStatus
+    return matchesSearch && matchesRole
   })
 
-  const handleViewUser = (user: unknown) => {
-    console.log("View user:", user)
+
+  const handleChangeRole = (user: SystemUser) => {
+    setSelectedUser(user)
+    setNewRole(user.role)
+    setIsRoleModalOpen(true)
   }
 
-  const handleEditUser = (user: unknown) => {
-    console.log("Edit user:", user)
-  }
+  const handleRoleUpdate = async () => {
+    if (!selectedUser) return
+    
+    try {
+      setUpdating(true)
+      const response = await fetch(`/api/staff/${selectedUser.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          role: newRole
+        })
+      })
 
-  const handleDeleteUser = (user: unknown) => {
-    console.log("Delete user:", user)
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh users list
+        await fetchSystemUsers()
+        setIsRoleModalOpen(false)
+        setSelectedUser(null)
+        console.log("Role updated successfully")
+      } else {
+        console.error("Failed to update role:", data.error)
+      }
+    } catch (error) {
+      console.error("Error updating role:", error)
+    } finally {
+      setUpdating(false)
+    }
   }
 
   const handleCreateUser = () => {
-    setFormData({ name: '', email: '', phone: '', role: '' })
+    setFormData({ name: '', email: '', phone: '', password: '', role: '' })
     setIsDialogOpen(true)
   }
 
@@ -149,7 +255,7 @@ export default function ManageUserPage() {
   }
 
   const handleSubmitUser = async () => {
-    if (!formData.name || !formData.email || !formData.phone || !formData.role) {
+    if (!formData.name || !formData.email || !formData.phone || !formData.password || !formData.role) {
       alert('Please fill in all fields')
       return
     }
@@ -162,7 +268,10 @@ export default function ManageUserPage() {
 
     try {
       setCreating(true)
-      const response = await fetch('/api/users', {
+      console.log("Creating staff member")
+      
+      // Use the server-side API endpoint (proper Next.js approach)
+      const response = await fetch('/api/staff', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -171,21 +280,23 @@ export default function ManageUserPage() {
           name: formData.name,
           email: formData.email,
           phone_number: formData.phone,
-          role: formData.role,
-          status: 'active'
+          password: formData.password,
+          role: formData.role
         })
       })
 
       const data = await response.json()
 
       if (data.success) {
+        console.log('Staff created successfully:', data)
         // Refresh users list
         await fetchSystemUsers()
         setIsDialogOpen(false)
-        setFormData({ name: '', email: '', phone: '', role: '' })
-        console.log('User created successfully')
+        setFormData({ name: '', email: '', phone: '', password: '', role: '' })
+        alert('Staff member created successfully!')
       } else {
-        alert(data.error || 'Failed to create user')
+        console.error('Failed to create staff:', data.error)
+        alert(data.error || 'Failed to create staff member')
       }
     } catch (error) {
       console.error('Error creating user:', error)
@@ -201,41 +312,32 @@ export default function ManageUserPage() {
       admin: users.filter(u => u.role === "admin").length,
       manager: users.filter(u => u.role === "manager").length,
       agent: users.filter(u => u.role === "agent").length,
-      user: users.filter(u => u.role === "user").length,
     }
   }
 
-  const getStatusCounts = () => {
-    return {
-      active: users.filter(u => u.status === "active").length,
-      inactive: users.filter(u => u.status === "inactive").length,
-      suspended: users.filter(u => u.status === "suspended").length,
-    }
-  }
 
   const roleCounts = getRoleCounts()
-  const statusCounts = getStatusCounts()
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Manage Users</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Manage Staff</h1>
             <p className="text-muted-foreground">
-              Manage system users, roles, and permissions.
+              Manage staff members, roles, and permissions.
             </p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={handleCreateUser}>
                 <Plus className="mr-2 h-4 w-4" />
-                Create User
+                Create Staff
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Create New User</DialogTitle>
+                <DialogTitle>Create New Staff Member</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -279,13 +381,22 @@ export default function ManageUserPage() {
                   </p>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="Enter password"
+                    value={formData.password}
+                    onChange={(e) => handleFormChange('password', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="role">Role</Label>
                   <Select value={formData.role} onValueChange={(value) => handleFormChange('role', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
                       <SelectItem value="agent">Agent</SelectItem>
                       <SelectItem value="manager">Manager</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
@@ -302,9 +413,9 @@ export default function ManageUserPage() {
                   </Button>
                   <Button 
                     onClick={handleSubmitUser}
-                    disabled={creating || !formData.name || !formData.email || !formData.phone || !formData.role}
+                    disabled={creating || !formData.name || !formData.email || !formData.phone || !formData.password || !formData.role}
                   >
-                    {creating ? 'Creating...' : 'Create User'}
+                    {creating ? 'Creating...' : 'Create Staff'}
                   </Button>
                 </div>
               </div>
@@ -312,36 +423,22 @@ export default function ManageUserPage() {
           </Dialog>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Users
+                Total Staff
               </CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{users.length}</div>
               <p className="text-xs text-muted-foreground">
-                System users
+Staff members
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Active Users
-              </CardTitle>
-              <UserCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{statusCounts.active}</div>
-              <p className="text-xs text-muted-foreground">
-                Currently active
-              </p>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -358,20 +455,6 @@ export default function ManageUserPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Inactive Users
-              </CardTitle>
-              <UserX className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{statusCounts.inactive}</div>
-              <p className="text-xs text-muted-foreground">
-                Inactive/suspended
-              </p>
-            </CardContent>
-          </Card>
         </div>
 
         <div className="flex flex-wrap gap-4">
@@ -410,31 +493,18 @@ export default function ManageUserPage() {
               <SelectItem value="admin">Admin</SelectItem>
               <SelectItem value="manager">Manager</SelectItem>
               <SelectItem value="agent">Agent</SelectItem>
-              <SelectItem value="user">User</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-48">
-              <Filter className="mr-2 h-4 w-4" />
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="suspended">Suspended</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>System Users ({filteredUsers.length})</CardTitle>
+            <CardTitle>Staff Members ({filteredUsers.length})</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="flex justify-center items-center py-8">
-                <div className="text-muted-foreground">Loading system users...</div>
+                <div className="text-muted-foreground">Loading staff members...</div>
               </div>
             ) : error ? (
               <div className="flex justify-center items-center py-8">
@@ -442,14 +512,57 @@ export default function ManageUserPage() {
               </div>
             ) : (
           
-              <DataTable
-                columns={userColumns}
-                data={filteredUsers}
-                onRowClick={handleViewUser}
+              <StaffTable
+                users={filteredUsers}
+                onChangeRole={handleChangeRole}
               />
             )}
           </CardContent>
         </Card>
+
+        {/* Role Change Modal */}
+        <Dialog open={isRoleModalOpen} onOpenChange={setIsRoleModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Change Staff Role</DialogTitle>
+              <DialogDescription>
+                Update the role for {selectedUser?.name}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <Label>Select Role:</Label>
+                <Select value={newRole} onValueChange={setNewRole}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Select a role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsRoleModalOpen(false)}
+                disabled={updating}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleRoleUpdate}
+                disabled={updating || !newRole}
+              >
+                {updating ? "Updating..." : "Update Role"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   )

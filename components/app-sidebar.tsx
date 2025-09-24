@@ -4,7 +4,6 @@ import {
   Home,
   CreditCard,
   Users,
-  Shield,
   UserCog,
   DollarSign,
   FileText,
@@ -44,12 +43,7 @@ const menuItems = [
     icon: Users,
   },
   {
-    title: "Auth",
-    url: "/auth",
-    icon: Shield,
-  },
-  {
-    title: "Manage user",
+    title: "Manage Staff",
     url: "/manage-user",
     icon: UserCog,
   },

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, DollarSign, TrendingUp, User, Clock, CheckCircle2, AlertCircle } from "lucide-react"
+import { Calendar, DollarSign, TrendingUp, User, Clock, CheckCircle2, AlertCircle, HandCoins, XCircle } from "lucide-react"
 
 interface LoanDetailsModalProps {
     isOpen: boolean
@@ -28,6 +28,9 @@ export function LoanDetailsModal({
     const [loanDetails, setLoanDetails] = useState<any>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [showSettlementDialog, setShowSettlementDialog] = useState(false)
+    const [showTerminateDialog, setShowTerminateDialog] = useState(false)
+    const [actionLoading, setActionLoading] = useState(false)
 
     useEffect(() => {
         if (loan && isOpen) {
@@ -131,14 +134,76 @@ export function LoanDetailsModal({
 
     const getStatusColor = (status: string) => {
         const colors = {
-            active: "bg-gray-100 text-gray-800",
-            running: "bg-gray-100 text-gray-800",
-            pending: "bg-gray-200 text-gray-900",
-            overdue: "bg-gray-300 text-black",
-            completed: "bg-gray-100 text-gray-800",
-            rejected: "bg-gray-200 text-gray-900",
+            active: "bg-green-100 text-green-800",
+            running: "bg-green-100 text-green-800",
+            pending: "bg-yellow-100 text-yellow-800",
+            overdue: "bg-red-100 text-red-800",
+            completed: "bg-green-100 text-green-800",
+            settled: "bg-green-100 text-green-800",
+            terminated: "bg-red-100 text-red-800",
+            rejected: "bg-red-100 text-red-800",
         }
         return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
+    }
+
+    const handleSettlement = async () => {
+        if (!loan?.id) return
+        
+        try {
+            setActionLoading(true)
+            const response = await fetch(`/api/loans/${loan.id}/settle`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            
+            const data = await response.json()
+            
+            if (data.success) {
+                setShowSettlementDialog(false)
+                // Refresh loan details
+                await fetchLoanDetails()
+                alert('Loan settled successfully!')
+            } else {
+                alert(data.error || 'Failed to settle loan')
+            }
+        } catch (error) {
+            console.error('Error settling loan:', error)
+            alert('Failed to settle loan')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
+    const handleTermination = async () => {
+        if (!loan?.id) return
+        
+        try {
+            setActionLoading(true)
+            const response = await fetch(`/api/loans/${loan.id}/terminate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            
+            const data = await response.json()
+            
+            if (data.success) {
+                setShowTerminateDialog(false)
+                // Refresh loan details
+                await fetchLoanDetails()
+                alert('Loan terminated successfully!')
+            } else {
+                alert(data.error || 'Failed to terminate loan')
+            }
+        } catch (error) {
+            console.error('Error terminating loan:', error)
+            alert('Failed to terminate loan')
+        } finally {
+            setActionLoading(false)
+        }
     }
 
     return (
@@ -320,11 +385,123 @@ export function LoanDetailsModal({
                     </CardContent>
                 </Card>
 
+                        {/* Action Buttons for Active Loans (not completed or terminated) */}
+                        {((loanDetails?.loan || loan)?.status !== 'completed') && 
+                         ((loanDetails?.loan || loan)?.status !== 'terminated') &&
+                         ((loanDetails?.loan || loan)?.status !== 'settled') && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Loan Actions</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex gap-4">
+                                        <Button 
+                                            onClick={() => setShowSettlementDialog(true)}
+                                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                                            disabled={actionLoading}
+                                        >
+                                            <HandCoins className="h-4 w-4" />
+                                            Settlement
+                                        </Button>
+                                        <Button 
+                                            onClick={() => setShowTerminateDialog(true)}
+                                            variant="destructive"
+                                            className="flex items-center gap-2"
+                                            disabled={actionLoading}
+                                        >
+                                            <XCircle className="h-4 w-4" />
+                                            Terminate Loan
+                                        </Button>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-2">
+                                        Settlement: Mark loan as fully paid | Terminate: Cancel the loan
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        )}
+
                         <div className="flex justify-end pt-4 border-t">
                             <Button variant="outline" onClick={onClose}>
                                 Close
                             </Button>
                         </div>
+
+                        {/* Settlement Confirmation Dialog */}
+                        <Dialog open={showSettlementDialog} onOpenChange={setShowSettlementDialog}>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Settlement Confirmation</DialogTitle>
+                                    <DialogDescription>
+                                        Are you sure you want to settle this loan? This action will mark the loan as fully paid and completed.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                        <h4 className="font-medium text-green-800">Settlement Details:</h4>
+                                        <ul className="text-sm text-green-700 mt-2 space-y-1">
+                                            <li>• Loan will be marked as completed</li>
+                                            <li>• Remaining amount: {formatCurrency(calculatedDetails.remainingAmount)}</li>
+                                            <li>• Customer will be notified</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <Button 
+                                        variant="outline" 
+                                        onClick={() => setShowSettlementDialog(false)}
+                                        disabled={actionLoading}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button 
+                                        onClick={() => handleSettlement()}
+                                        className="bg-green-600 hover:bg-green-700"
+                                        disabled={actionLoading}
+                                    >
+                                        {actionLoading ? 'Processing...' : 'Confirm Settlement'}
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
+                        {/* Terminate Confirmation Dialog */}
+                        <Dialog open={showTerminateDialog} onOpenChange={setShowTerminateDialog}>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Terminate Loan Confirmation</DialogTitle>
+                                    <DialogDescription>
+                                        Are you sure you want to terminate this loan? This action cannot be undone.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                        <h4 className="font-medium text-red-800">Termination Details:</h4>
+                                        <ul className="text-sm text-red-700 mt-2 space-y-1">
+                                            <li>• Loan will be cancelled immediately</li>
+                                            <li>• All future payments will be stopped</li>
+                                            <li>• Customer will be notified</li>
+                                            <li>• This action cannot be reversed</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <Button 
+                                        variant="outline" 
+                                        onClick={() => setShowTerminateDialog(false)}
+                                        disabled={actionLoading}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button 
+                                        variant="destructive"
+                                        onClick={() => handleTermination()}
+                                        disabled={actionLoading}
+                                    >
+                                        {actionLoading ? 'Processing...' : 'Confirm Termination'}
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
                     </div>
                 )}
             </DialogContent>

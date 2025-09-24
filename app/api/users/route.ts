@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
         if (search) queryParams.append('search', search);
         if (status) queryParams.append('status', status);
 
+        // First, fetch users
         const backendResponse = await fetch(`${backendUrl}/users?select=*`, {
             method: 'GET',
             headers: {
@@ -61,7 +62,45 @@ export async function GET(request: NextRequest) {
             throw new Error(`Backend API error: ${backendResponse.status}`);
         }
 
-        const backendData = await backendResponse.json();
+        let backendData = await backendResponse.json();
+        
+        // Then, for each user, fetch their loan count
+        const usersWithLoanCounts = await Promise.all(
+            backendData.map(async (user: any) => {
+                try {
+                    const loansResponse = await fetch(`${backendUrl}/loans?user_id=eq.${user.id}&select=id`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey':`${process.env.API_KEY || ''}`,
+                            'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                        },
+                    });
+                    
+                    if (loansResponse.ok) {
+                        const loans = await loansResponse.json();
+                        return {
+                            ...user,
+                            totalLoans: Array.isArray(loans) ? loans.length : 0,
+                        };
+                    } else {
+                        return {
+                            ...user,
+                            totalLoans: 0,
+                        };
+                    }
+                } catch (error) {
+                    console.log(`Error fetching loans for user ${user.id}:`, error);
+                    return {
+                        ...user,
+                        totalLoans: 0,
+                    };
+                }
+            })
+        );
+        
+        backendData = usersWithLoanCounts;
+
         console.log("Backend data", backendData)
         // If backend doesn't return data, use mock data as fallback
         if (!backendData || (!Array.isArray(backendData) && backendData.length === 0)) {

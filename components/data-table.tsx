@@ -27,11 +27,14 @@ export function DataTable<T = Record<string, unknown>>({ columns, data, onRowCli
     if (key === "status") {
       const statusColors = {
         active: "bg-green-100 text-green-800",
+        running: "bg-green-100 text-green-800",
         pending: "bg-yellow-100 text-yellow-800",
         overdue: "bg-red-100 text-red-800",
         approved: "bg-blue-100 text-blue-800",
         rejected: "bg-red-100 text-red-800",
         completed: "bg-green-100 text-green-800",
+        settled: "bg-green-100 text-green-800",
+        terminated: "bg-red-100 text-red-800",
         inactive: "bg-gray-100 text-gray-800",
         suspended: "bg-red-100 text-red-800",
       }
