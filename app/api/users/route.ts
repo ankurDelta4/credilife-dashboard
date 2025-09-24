@@ -99,17 +99,17 @@ export async function GET(request: NextRequest) {
         }
 
         // Supabase returns an array directly
-        const users = Array.isArray(backendData) ? backendData : [];
+        const backendUsers = Array.isArray(backendData) ? backendData : [];
         
         return NextResponse.json({
             success: true,
             data: {
-                users: users,
+                users: backendUsers,
                 pagination: {
                     page,
                     limit,
-                    total: users.length,
-                    totalPages: Math.ceil(users.length / limit)
+                    total: backendUsers.length,
+                    totalPages: Math.ceil(backendUsers.length / limit)
                 }
             },
             message: 'Users retrieved successfully'

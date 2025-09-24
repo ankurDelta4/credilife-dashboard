@@ -1,4 +1,9 @@
-import { api, ApiResponse, PaginationParams, PaginatedResponse } from './api';
+import { api, ApiResponse, PaginatedResponse } from './api';
+
+interface PaginationParams {
+    page?: number;
+    limit?: number;
+}
 
 // Types
 export interface Loan {

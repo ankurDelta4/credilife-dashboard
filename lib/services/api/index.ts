@@ -49,7 +49,7 @@ export async function apiRequest<T = any>(
 ): Promise<ApiResponse<T>> {
     const url = `${API_BASE_URL}${endpoint}`;
 
-    const defaultHeaders = {
+    const defaultHeaders: any = {
         'Content-Type': 'application/json',
     };
 

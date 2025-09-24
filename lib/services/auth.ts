@@ -1,7 +1,7 @@
 import { api, ApiResponse, tokenManager } from './api';
 
 // Types
-export interface User {
+export interface AuthUser {
     id: number;
     email: string;
     role: string;
@@ -18,7 +18,7 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-    user: User;
+    user: AuthUser;
     token: string;
 }
 
@@ -50,8 +50,8 @@ export const authService = {
     },
 
     // Get current user info
-    async getCurrentUser(): Promise<ApiResponse<{ user: User }>> {
-        return api.get<{ user: User }>('/auth');
+    async getCurrentUser(): Promise<ApiResponse<{ user: AuthUser }>> {
+        return api.get<{ user: AuthUser }>('/auth');
     },
 
     // Logout user

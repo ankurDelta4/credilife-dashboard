@@ -200,7 +200,7 @@ export default function Dashboard() {
                 ) : (
                   <DataTable
                     columns={dataType === 'applications' ? recentApplicationsColumns : recentLoansColumns}
-                    data={recentData}
+                    data={recentData as any}
                   />
                 )}
               </CardContent>

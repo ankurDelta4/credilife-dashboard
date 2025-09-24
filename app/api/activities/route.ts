@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
                 console.log("Real data:", { loans: loans.length, applications: applications.length, users: users.length });
 
                 // Generate activities from real events
-                const realActivities = [];
+                const realActivities: any[] = [];
                 let activityId = 1;
 
                 // Add loan-related activities

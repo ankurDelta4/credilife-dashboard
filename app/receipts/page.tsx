@@ -48,7 +48,7 @@ const mockReceipts: Receipt[] = [
         loanAmount: 50000,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "pending",
-        submittedDate: new Date("2024-09-19"),
+        submittedDate: "2024-09-19",
         loanId: "L001"
     },
     {
@@ -57,7 +57,7 @@ const mockReceipts: Receipt[] = [
         loanAmount: 25000,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "pending",
-        submittedDate: new Date("2024-09-18"),
+        submittedDate: "2024-09-18",
         loanId: "L002"
     },
     {
@@ -66,7 +66,7 @@ const mockReceipts: Receipt[] = [
         loanAmount: 75000,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "approved",
-        submittedDate: new Date("2024-09-17"),
+        submittedDate: "2024-09-17",
         loanId: "L003"
     },
     {
@@ -75,7 +75,7 @@ const mockReceipts: Receipt[] = [
         loanAmount: 30000,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "rejected",
-        submittedDate: new Date("2024-09-16"),
+        submittedDate: "2024-09-16",
         loanId: "L004"
     },
     {
@@ -84,7 +84,7 @@ const mockReceipts: Receipt[] = [
         loanAmount: 15000,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "pending",
-        submittedDate: new Date("2024-09-15"),
+        submittedDate: "2024-09-15",
         loanId: "L005"
     }
 ]
