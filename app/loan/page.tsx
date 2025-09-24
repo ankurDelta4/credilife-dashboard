@@ -4,11 +4,14 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { DataTable, Column } from "@/components/data-table"
 import { LoanDetailsModal } from "@/components/loan-details-modal"
+import { QuestionFlowModal } from "@/components/question-flow-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Plus, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react"
 import {
     Pagination,
@@ -50,11 +53,51 @@ export default function LoanPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false)
+  const [isQuestionFlowOpen, setIsQuestionFlowOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [users, setUsers] = useState<Array<{id: string, name: string}>>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [basicLoanData, setBasicLoanData] = useState({
+    user_id: '',
+    requested_amount: '',
+    loan_purpose: '',
+    tenure: '',
+    repayment_type: 'monthly',
+    interest_amount: '',
+    principal_amount: '',
+    closing_fees: '',
+    total_repayment: '',
+    id_number: '',
+    questions_count: '',
+    is_renewal: false
+  })
   const itemsPerPage = 10
 
   useEffect(() => {
     fetchLoans()
+    fetchUsers()
   }, [])
+
+  const fetchUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      const response = await fetch('/api/users')
+      const data = await response.json()
+      
+      if (data.success && data.data?.users) {
+        const userList = data.data.users.map((user: any) => ({
+          id: user.id.toString(),
+          name: user.name
+        }))
+        setUsers(userList)
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
 
   const fetchLoans = async () => {
     try {
@@ -108,7 +151,84 @@ export default function LoanPage() {
 
 
   const handleNewLoan = () => {
-    console.log("Create new loan")
+    setBasicLoanData({
+      user_id: '',
+      requested_amount: '',
+      loan_purpose: '',
+      tenure: '',
+      repayment_type: 'monthly',
+      interest_amount: '',
+      principal_amount: '',
+      closing_fees: '',
+      total_repayment: '',
+      id_number: '',
+      questions_count: '',
+      is_renewal: false
+    })
+    setIsNewLoanModalOpen(true)
+  }
+
+  const handleBasicDataSubmit = () => {
+    // Validate basic loan data
+    if (!basicLoanData.user_id || !basicLoanData.requested_amount || !basicLoanData.loan_purpose || !basicLoanData.tenure) {
+      alert('Please fill in all required fields: Customer, Requested Amount, Loan Purpose, and Tenure')
+      return
+    }
+
+    // Validate amount range
+    const amount = parseFloat(basicLoanData.requested_amount)
+    if (amount < 2500 || amount > 30000) {
+      alert('Requested amount must be between $2,500 and $30,000')
+      return
+    }
+
+    // Close basic form and open question flow
+    setIsNewLoanModalOpen(false)
+    setIsQuestionFlowOpen(true)
+  }
+
+  const handleQuestionFlowSubmit = async (questionFlowData: any) => {
+    try {
+      setIsCreating(true)
+      
+      const response = await fetch('/api/loan-applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...questionFlowData,
+          requested_amount: parseFloat(questionFlowData.requested_amount),
+          interest_amount: questionFlowData.interest_amount ? parseFloat(questionFlowData.interest_amount) : 0,
+          principal_amount: questionFlowData.principal_amount ? parseFloat(questionFlowData.principal_amount) : parseFloat(questionFlowData.requested_amount),
+          closing_fees: questionFlowData.closing_fees ? parseFloat(questionFlowData.closing_fees) : 0,
+          total_repayment: questionFlowData.total_repayment ? parseFloat(questionFlowData.total_repayment) : parseFloat(questionFlowData.requested_amount),
+          tenure: parseFloat(questionFlowData.tenure),
+          id_number: questionFlowData.id_number ? parseFloat(questionFlowData.id_number) : null,
+          status: 'pending',
+          current_stage: 'application_submitted'
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('Loan application created successfully!')
+        setIsQuestionFlowOpen(false)
+        fetchLoans() // Refresh the loans list
+      } else {
+        alert(data.error || 'Failed to create loan application')
+      }
+    } catch (error) {
+      console.error('Error creating loan application:', error)
+      alert('Failed to create loan application')
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleFormChange = (field: string, value: string | boolean) => {
+    setBasicLoanData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleRowClick = (loan: Loan) => {
@@ -282,6 +402,112 @@ export default function LoanPage() {
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           loan={selectedLoan}
+        />
+
+        {/* Basic Loan Data Modal */}
+        <Dialog open={isNewLoanModalOpen} onOpenChange={setIsNewLoanModalOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>New Loan Application - Basic Details</DialogTitle>
+              <DialogDescription>
+                Enter basic loan information, then we'll guide you through customer questions
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="user_id">Select Customer *</Label>
+                {loadingUsers ? (
+                  <div className="text-sm text-muted-foreground">Loading customers...</div>
+                ) : (
+                  <Select value={basicLoanData.user_id} onValueChange={(value) => handleFormChange('user_id', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="requested_amount">Requested Amount * (Min: $2,500 - Max: $30,000)</Label>
+                <Input
+                  id="requested_amount"
+                  type="number"
+                  min="2500"
+                  max="30000"
+                  placeholder="2500"
+                  value={basicLoanData.requested_amount}
+                  onChange={(e) => handleFormChange('requested_amount', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="loan_purpose">Loan Purpose *</Label>
+                <Input
+                  id="loan_purpose"
+                  placeholder="Purpose of the loan..."
+                  value={basicLoanData.loan_purpose}
+                  onChange={(e) => handleFormChange('loan_purpose', e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tenure">Tenure *</Label>
+                <Select value={basicLoanData.tenure} onValueChange={(value) => handleFormChange('tenure', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tenure" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3 months</SelectItem>
+                    <SelectItem value="6">6 months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="repayment_type">Repayment Type</Label>
+                <Select value={basicLoanData.repayment_type} onValueChange={(value) => handleFormChange('repayment_type', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select repayment type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="bi-weekly">Bi-weekly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsNewLoanModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleBasicDataSubmit}
+              >
+                Continue to Questions
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Question Flow Modal */}
+        <QuestionFlowModal
+          isOpen={isQuestionFlowOpen}
+          onClose={() => setIsQuestionFlowOpen(false)}
+          onSubmit={handleQuestionFlowSubmit}
+          isLoading={isCreating}
+          initialLoanData={basicLoanData}
         />
 
       </div>
