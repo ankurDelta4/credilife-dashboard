@@ -22,11 +22,12 @@ export async function POST(request: NextRequest) {
         } = body;
 
         // Validation
-        if (!user_id || !requested_amount || !loan_purpose || !tenure || !user_data) {
+        console.log('Received loan application data:', body);
+        if (!user_id || !requested_amount || !tenure || !user_data) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: 'Required fields: user_id, requested_amount, loan_purpose, tenure, user_data',
+                    error: 'Required fields: user_id, requested_amount, tenure, user_data',
                     code: 'MISSING_FIELDS'
                 },
                 { status: 400 }
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate user_data structure
-        if (!user_data.first_name || !user_data.last_name || !user_data.phone || !user_data.email) {
+        if (!user_data.first_name || !user_data.last_name || !user_data.whatsapp_number || !user_data.email) {
             return NextResponse.json(
                 {
                     success: false,
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
             tenure: parseInt(tenure),
             repayment_type,
             id_number: id_number ? parseInt(id_number) : null,
-            questions_count: parseInt(questions_count),
+            questions_count: 30,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };

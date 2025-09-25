@@ -20,7 +20,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Eye, Check, X, ChevronLeft, ChevronRight } from "lucide-react"
+import { Eye, Check, X, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import {
     Pagination,
     PaginationContent,
@@ -28,6 +28,9 @@ import {
     PaginationItem,
     PaginationLink,
 } from "@/components/ui/pagination"
+import { useToast } from "@/components/ui/use-toast"
+import { bulkExport } from "@/lib/utils/export-utils"
+import { ImageGallery } from "@/components/image-gallery"
 
 // Receipt interface
 interface Receipt {
@@ -122,12 +125,12 @@ function ReceiptModal({ receipt, isOpen, onClose, onApprove, onReject }: Receipt
                 </DialogHeader>
 
                 <div className="space-y-4">
-                    <div className="flex justify-center">
-                        <img
-                            src={receipt.receiptImage}
-                            alt={`Receipt for ${receipt.username}`}
-                            className="max-w-full h-auto rounded-lg border shadow-sm"
-                            style={{ maxHeight: "400px" }}
+                    <div className="border rounded-lg p-4">
+                        <ImageGallery
+                            files={receipt.receiptImage}
+                            label="Receipt Image"
+                            fieldName="receipt"
+                            applicationId={receipt.id}
                         />
                     </div>
 
@@ -153,32 +156,34 @@ function ReceiptModal({ receipt, isOpen, onClose, onApprove, onReject }: Receipt
                     </div>
                 </div>
 
-                <DialogFooter className="flex gap-2">
+                <DialogFooter className="flex justify-between">
                     <Button
                         variant="outline"
                         onClick={onClose}
                     >
-                        Cancel
+                        Close
                     </Button>
-                    {receipt.status === "pending" && (
-                        <>
-                            <Button
-                                variant="destructive"
-                                onClick={handleReject}
-                                className="flex items-center gap-2"
-                            >
-                                <X className="h-4 w-4" />
-                                Reject
-                            </Button>
-                            <Button
-                                onClick={handleApprove}
-                                className="flex items-center gap-2"
-                            >
-                                <Check className="h-4 w-4" />
-                                Approve
-                            </Button>
-                        </>
-                    )}
+                    <div className="flex gap-2">
+                        {receipt.status === "pending" && (
+                            <>
+                                <Button
+                                    variant="destructive"
+                                    onClick={handleReject}
+                                    className="flex items-center gap-2"
+                                >
+                                    <X className="h-4 w-4" />
+                                    Reject
+                                </Button>
+                                <Button
+                                    onClick={handleApprove}
+                                    className="flex items-center gap-2"
+                                >
+                                    <Check className="h-4 w-4" />
+                                    Approve
+                                </Button>
+                            </>
+                        )}
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -266,6 +271,8 @@ export default function Receipts() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(1)
+    const [isExporting, setIsExporting] = useState(false)
+    const { toast } = useToast()
     const itemsPerPage = 10
 
     useEffect(() => {
@@ -299,6 +306,52 @@ export default function Receipts() {
     const handleCloseModal = () => {
         setIsModalOpen(false)
         setSelectedReceipt(null)
+    }
+
+    const handleExportReceipts = async () => {
+        try {
+            setIsExporting(true)
+            
+            if (receipts.length === 0) {
+                toast({
+                    variant: "destructive",
+                    title: "No Data",
+                    description: "No receipts available to export"
+                })
+                return
+            }
+            
+            // Transform receipt data for export
+            const exportData = receipts.map(receipt => ({
+                id: receipt.id,
+                customer_name: receipt.username,
+                loan_id: receipt.loanId,
+                payment_amount: receipt.loanAmount,
+                status: receipt.status,
+                payment_date: receipt.submittedDate,
+                created_at: receipt.submittedDate
+            }))
+            
+            bulkExport({
+                data: exportData,
+                type: 'receipts'
+            })
+            
+            toast({
+                variant: "success",
+                title: "Export Successful",
+                description: `Successfully exported ${receipts.length} receipts to CSV`
+            })
+        } catch (error) {
+            console.error('Export error:', error)
+            toast({
+                variant: "destructive",
+                title: "Export Failed",
+                description: "Failed to export receipts data"
+            })
+        } finally {
+            setIsExporting(false)
+        }
     }
 
     const handleApprove = async (receiptId: string | number) => {
@@ -377,11 +430,21 @@ export default function Receipts() {
     return (
         <DashboardLayout>
             <div className="space-y-6">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Receipts</h1>
-                    <p className="text-muted-foreground">
-                        Review and manage loan payment receipts
-                    </p>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">Receipts</h1>
+                        <p className="text-muted-foreground">
+                            Review and manage loan payment receipts
+                        </p>
+                    </div>
+                    <Button 
+                        variant="outline" 
+                        onClick={handleExportReceipts}
+                        disabled={isExporting || receipts.length === 0}
+                    >
+                        <Download className="mr-2 h-4 w-4" />
+                        {isExporting ? 'Exporting...' : 'Export CSV'}
+                    </Button>
                 </div>
 
                 {loading ? (

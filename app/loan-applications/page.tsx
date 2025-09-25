@@ -23,6 +23,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Eye, Check, X, Search, Filter, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
+import { bulkExport } from "@/lib/utils/export-utils"
+import { ImageGallery } from "@/components/image-gallery"
 import {
     Pagination,
     PaginationContent,
@@ -111,6 +114,19 @@ function LoanApplicationModal({
     const isImageOrFileField = (fieldName: string) => {
         const linkOnlyFields = ['business_insta', 'company_site']
         return !linkOnlyFields.includes(fieldName)
+    }
+
+    const isDocumentField = (fieldName: string) => {
+        const documentFields = [
+            'id_card_front',
+            'bank_statements_employed', 
+            'employment_letter',
+            'business_location_photos',
+            'product_photos', 
+            'supplier_invoices',
+            'bank_statements_self'
+        ]
+        return documentFields.includes(fieldName)
     }
 
     const handleDownload = async (url: string, fileName: string) => {
@@ -294,12 +310,27 @@ function LoanApplicationModal({
                     <div className="p-4 bg-gray-50 rounded-lg">
                         <h3 className="font-semibold mb-3 text-gray-900">Applicant Information</h3>
                         {userData ? (
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                                {userDataFieldOrder
-                                    .filter(key => key in userData)
-                                    .map((key) => {
-                                        const value = userData[key]
-                                        return (
+                            <div className="space-y-6">
+                                {/* Basic Information */}
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    {userDataFieldOrder
+                                        .filter(key => key in userData && !isDocumentField(key))
+                                        .map((key) => {
+                                            const value = userData[key]
+                                            return (
+                                                <div key={key} className="flex flex-col">
+                                                    <span className="font-medium text-gray-600">
+                                                        {formatFieldName(key)}:
+                                                    </span>
+                                                    <div className="mt-1">
+                                                        {renderFieldValue(key, value)}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    {Object.entries(userData)
+                                        .filter(([key]) => !userDataFieldOrder.includes(key) && !isDocumentField(key))
+                                        .map(([key, value]) => (
                                             <div key={key} className="flex flex-col">
                                                 <span className="font-medium text-gray-600">
                                                     {formatFieldName(key)}:
@@ -308,20 +339,34 @@ function LoanApplicationModal({
                                                     {renderFieldValue(key, value)}
                                                 </div>
                                             </div>
-                                        )
-                                    })}
-                                {Object.entries(userData)
-                                    .filter(([key]) => !userDataFieldOrder.includes(key))
-                                    .map(([key, value]) => (
-                                        <div key={key} className="flex flex-col">
-                                            <span className="font-medium text-gray-600">
-                                                {formatFieldName(key)}:
-                                            </span>
-                                            <div className="mt-1">
-                                                {renderFieldValue(key, value)}
+                                        ))}
+                                </div>
+                                
+                                {/* Documents Section */}
+                                <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-4 text-gray-900">Uploaded Documents</h4>
+                                    <div className="space-y-6">
+                                        {[...userDataFieldOrder, ...Object.keys(userData)]
+                                            .filter((key, index, arr) => arr.indexOf(key) === index) // Remove duplicates
+                                            .filter(key => key in userData && isDocumentField(key))
+                                            .map((key) => (
+                                                <ImageGallery
+                                                    key={key}
+                                                    files={userData[key]}
+                                                    label={formatFieldName(key)}
+                                                    fieldName={key}
+                                                    applicationId={application.id}
+                                                />
+                                            ))}
+                                        {[...userDataFieldOrder, ...Object.keys(userData)]
+                                            .filter((key, index, arr) => arr.indexOf(key) === index)
+                                            .filter(key => key in userData && isDocumentField(key)).length === 0 && (
+                                            <div className="text-sm text-gray-500 italic">
+                                                No documents uploaded
                                             </div>
-                                        </div>
-                                    ))}
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         ) : (
                             <div className="text-sm text-gray-500">
@@ -460,6 +505,8 @@ export default function LoanApplicationsPage() {
     const [searchTerm, setSearchTerm] = useState("")
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [currentPage, setCurrentPage] = useState(1)
+    const [isExporting, setIsExporting] = useState(false)
+    const { toast } = useToast()
     const itemsPerPage = 10
 
     useEffect(() => {
@@ -579,6 +626,62 @@ export default function LoanApplicationsPage() {
         }
     }
 
+    const handleExportApplications = async () => {
+        try {
+            setIsExporting(true)
+            
+            if (filteredApplications.length === 0) {
+                toast({
+                    variant: "destructive",
+                    title: "No Data",
+                    description: "No loan applications available to export"
+                })
+                return
+            }
+            
+            // Transform application data for export
+            const exportData = filteredApplications.map(app => ({
+                id: app.id,
+                user_id: app.customerName, // Using customerName as user identifier
+                user_name: app.customerName,
+                requested_amount: app.amount,
+                loan_purpose: app.loanPurpose || 'N/A',
+                tenure: app.tenure,
+                repayment_type: app.repaymentType,
+                principal_amount: app.principalAmount || app.amount,
+                interest_amount: app.interestAmount || 0,
+                closing_fees: app.closingFees || 0,
+                total_repayment: app.totalRepayment || app.amount,
+                status: app.status,
+                current_stage: app.currentStage || 'application_submitted',
+                questions_count: 0,
+                is_renewal: false,
+                created_at: app.submitDate,
+                updated_at: app.submitDate
+            }))
+            
+            bulkExport({
+                data: exportData,
+                type: 'applications'
+            })
+            
+            toast({
+                variant: "success",
+                title: "Export Successful",
+                description: `Successfully exported ${filteredApplications.length} loan applications to CSV`
+            })
+        } catch (error) {
+            console.error('Export error:', error)
+            toast({
+                variant: "destructive",
+                title: "Export Failed",
+                description: "Failed to export loan applications data"
+            })
+        } finally {
+            setIsExporting(false)
+        }
+    }
+
     const getStatusCounts = () => {
         return {
             all: applications.length,
@@ -594,11 +697,21 @@ export default function LoanApplicationsPage() {
     return (
         <DashboardLayout>
             <div className="space-y-6">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Loan Applications</h1>
-                    <p className="text-muted-foreground">
-                        Review and manage loan applications from customers
-                    </p>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">Loan Applications</h1>
+                        <p className="text-muted-foreground">
+                            Review and manage loan applications from customers
+                        </p>
+                    </div>
+                    <Button 
+                        variant="outline" 
+                        onClick={handleExportApplications}
+                        disabled={isExporting || filteredApplications.length === 0}
+                    >
+                        <Download className="mr-2 h-4 w-4" />
+                        {isExporting ? 'Exporting...' : 'Export CSV'}
+                    </Button>
                 </div>
 
                 <div className="flex flex-wrap gap-2">

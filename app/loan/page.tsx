@@ -9,10 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CustomerSearchInput } from "@/components/customer-search-input"
+import { useToast } from "@/components/ui/use-toast"
+import { calculateInstallments } from "@/lib/utils/loan-calculations"
+import { bulkExport } from "@/lib/utils/export-utils"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Plus, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Search, Filter, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import {
     Pagination,
     PaginationContent,
@@ -56,48 +60,28 @@ export default function LoanPage() {
   const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false)
   const [isQuestionFlowOpen, setIsQuestionFlowOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
-  const [users, setUsers] = useState<Array<{id: string, name: string}>>([])
-  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [basicLoanData, setBasicLoanData] = useState({
     user_id: '',
+    user_name: '',
     requested_amount: '',
-    loan_purpose: '',
     tenure: '',
     repayment_type: 'monthly',
-    interest_amount: '',
-    principal_amount: '',
-    closing_fees: '',
-    total_repayment: '',
+    interest_amount: 0,
+    principal_amount: 0,
+    closing_fees: 0,
+    total_repayment: 0,
     id_number: '',
-    questions_count: '',
+    questions_count: 0,
     is_renewal: false
   })
+  const { toast } = useToast()
   const itemsPerPage = 10
 
   useEffect(() => {
     fetchLoans()
-    fetchUsers()
   }, [])
 
-  const fetchUsers = async () => {
-    try {
-      setLoadingUsers(true)
-      const response = await fetch('/api/users')
-      const data = await response.json()
-      
-      if (data.success && data.data?.users) {
-        const userList = data.data.users.map((user: any) => ({
-          id: user.id.toString(),
-          name: user.name
-        }))
-        setUsers(userList)
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error)
-    } finally {
-      setLoadingUsers(false)
-    }
-  }
 
   const fetchLoans = async () => {
     try {
@@ -153,16 +137,16 @@ export default function LoanPage() {
   const handleNewLoan = () => {
     setBasicLoanData({
       user_id: '',
+      user_name: '',
       requested_amount: '',
-      loan_purpose: '',
       tenure: '',
       repayment_type: 'monthly',
-      interest_amount: '',
-      principal_amount: '',
-      closing_fees: '',
-      total_repayment: '',
+      interest_amount: 0,
+      principal_amount: 0,
+      closing_fees: 0,
+      total_repayment: 0,
       id_number: '',
-      questions_count: '',
+      questions_count: 0,
       is_renewal: false
     })
     setIsNewLoanModalOpen(true)
@@ -170,65 +154,107 @@ export default function LoanPage() {
 
   const handleBasicDataSubmit = () => {
     // Validate basic loan data
-    if (!basicLoanData.user_id || !basicLoanData.requested_amount || !basicLoanData.loan_purpose || !basicLoanData.tenure) {
-      alert('Please fill in all required fields: Customer, Requested Amount, Loan Purpose, and Tenure')
+    if (!basicLoanData.user_id || !basicLoanData.requested_amount || !basicLoanData.tenure) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please fill in all required fields: Customer, Requested Amount, and Tenure"
+      })
       return
     }
 
     // Validate amount range
     const amount = parseFloat(basicLoanData.requested_amount)
     if (amount < 2500 || amount > 30000) {
-      alert('Requested amount must be between $2,500 and $30,000')
+      toast({
+        variant: "destructive",
+        title: "Invalid Amount",
+        description: "Requested amount must be between $2,500 and $30,000"
+      })
       return
     }
 
-    // Close basic form and open question flow
-    setIsNewLoanModalOpen(false)
-    setIsQuestionFlowOpen(true)
+    try {
+      // Calculate loan details
+      const calculation = calculateInstallments(
+        amount,
+        parseFloat(basicLoanData.tenure),
+        basicLoanData.repayment_type
+      )
+
+      // Update basic loan data with calculations
+      const updatedLoanData = {
+        ...basicLoanData,
+        principal_amount: calculation.principal,
+        interest_amount: calculation.totalInterest,
+        closing_fees: calculation.closingFee,
+        total_repayment: calculation.totalRepayment
+      }
+      
+      setBasicLoanData(updatedLoanData)
+      
+      // Close basic form and open question flow
+      setIsNewLoanModalOpen(false)
+      setIsQuestionFlowOpen(true)
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Calculation Error",
+        description: "Failed to calculate loan details. Please check your input."
+      })
+    }
   }
 
-  const handleQuestionFlowSubmit = async (questionFlowData: any) => {
-    try {
-      setIsCreating(true)
-      
-      const response = await fetch('/api/loan-applications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...questionFlowData,
-          requested_amount: parseFloat(questionFlowData.requested_amount),
-          interest_amount: questionFlowData.interest_amount ? parseFloat(questionFlowData.interest_amount) : 0,
-          principal_amount: questionFlowData.principal_amount ? parseFloat(questionFlowData.principal_amount) : parseFloat(questionFlowData.requested_amount),
-          closing_fees: questionFlowData.closing_fees ? parseFloat(questionFlowData.closing_fees) : 0,
-          total_repayment: questionFlowData.total_repayment ? parseFloat(questionFlowData.total_repayment) : parseFloat(questionFlowData.requested_amount),
-          tenure: parseFloat(questionFlowData.tenure),
-          id_number: questionFlowData.id_number ? parseFloat(questionFlowData.id_number) : null,
-          status: 'pending',
-          current_stage: 'application_submitted'
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        alert('Loan application created successfully!')
-        setIsQuestionFlowOpen(false)
-        fetchLoans() // Refresh the loans list
-      } else {
-        alert(data.error || 'Failed to create loan application')
-      }
-    } catch (error) {
-      console.error('Error creating loan application:', error)
-      alert('Failed to create loan application')
-    } finally {
-      setIsCreating(false)
-    }
+  const handleQuestionFlowSubmit = (questionFlowData: any) => {
+    // This function is now handled in QuestionFlowModal
+    // Just close the modal and refresh the loans
+    setIsQuestionFlowOpen(false)
+    fetchLoans()
+    
+    toast({
+      variant: "success",
+      title: "Success!",
+      description: "Loan application has been submitted successfully."
+    })
   }
 
   const handleFormChange = (field: string, value: string | boolean) => {
     setBasicLoanData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleExportLoans = async () => {
+    try {
+      setIsExporting(true)
+      
+      if (filteredLoans.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No Data",
+          description: "No loans available to export"
+        })
+        return
+      }
+      
+      bulkExport({
+        data: filteredLoans,
+        type: 'loans'
+      })
+      
+      toast({
+        variant: "success",
+        title: "Export Successful",
+        description: `Successfully exported ${filteredLoans.length} loans to CSV`
+      })
+    } catch (error) {
+      console.error('Export error:', error)
+      toast({
+        variant: "destructive",
+        title: "Export Failed",
+        description: "Failed to export loans data"
+      })
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleRowClick = (loan: Loan) => {
@@ -263,10 +289,20 @@ export default function LoanPage() {
               Manage and track all loan applications and active loans.
             </p>
           </div>
-          <Button onClick={handleNewLoan}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Loan Application
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleNewLoan}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Loan Application
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleExportLoans}
+              disabled={isExporting || filteredLoans.length === 0}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {isExporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-4">
@@ -415,25 +451,15 @@ export default function LoanPage() {
             </DialogHeader>
             
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="user_id">Select Customer *</Label>
-                {loadingUsers ? (
-                  <div className="text-sm text-muted-foreground">Loading customers...</div>
-                ) : (
-                  <Select value={basicLoanData.user_id} onValueChange={(value) => handleFormChange('user_id', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+              <CustomerSearchInput
+                value={basicLoanData.user_id}
+                onChange={(userId, userName) => {
+                  handleFormChange('user_id', userId)
+                  handleFormChange('user_name', userName)
+                }}
+                label="Select Customer"
+                required
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="requested_amount">Requested Amount * (Min: $2,500 - Max: $30,000)</Label>
@@ -448,15 +474,6 @@ export default function LoanPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="loan_purpose">Loan Purpose *</Label>
-                <Input
-                  id="loan_purpose"
-                  placeholder="Purpose of the loan..."
-                  value={basicLoanData.loan_purpose}
-                  onChange={(e) => handleFormChange('loan_purpose', e.target.value)}
-                />
-              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="tenure">Tenure *</Label>
@@ -508,6 +525,17 @@ export default function LoanPage() {
           onSubmit={handleQuestionFlowSubmit}
           isLoading={isCreating}
           initialLoanData={basicLoanData}
+          onSuccess={() => {
+            setIsQuestionFlowOpen(false)
+            fetchLoans()
+          }}
+          onError={(error) => {
+            toast({
+              variant: "destructive",
+              title: "Submission Failed",
+              description: error || "Failed to create loan application"
+            })
+          }}
         />
 
       </div>

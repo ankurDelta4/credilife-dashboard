@@ -6,7 +6,7 @@ import { DataTable, Column } from "@/components/data-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Search, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Search, ChevronLeft, ChevronRight, Upload, Download } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -32,6 +32,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { BulkImportModal } from "@/components/bulk-import-modal"
+import { useToast } from "@/components/ui/use-toast"
+import { bulkExport } from "@/lib/utils/export-utils"
 
 interface User {
   id: number
@@ -128,6 +131,9 @@ export default function UsersPage() {
     phone: '',
     role: 'user'
   })
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const { toast } = useToast()
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -219,13 +225,21 @@ export default function UsersPage() {
 
   const handleSubmitUser = async () => {
     if (!formData.name || !formData.email || !formData.phone) {
-      alert('Please fill in all required fields')
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please fill in all required fields"
+      })
       return
     }
 
     // Validate phone number length
     if (formData.phone.length !== 11) {
-      alert('Phone number must be exactly 11 digits including country code')
+      toast({
+        variant: "destructive",
+        title: "Invalid Phone Number",
+        description: "Phone number must be exactly 11 digits including country code"
+      })
       return
     }
 
@@ -252,15 +266,62 @@ export default function UsersPage() {
         await fetchUsers()
         setIsDialogOpen(false)
         setFormData({ name: '', email: '', phone: '', role: 'user' })
-        console.log('Customer created successfully')
+        toast({
+          variant: "success",
+          title: "Success",
+          description: "Customer created successfully"
+        })
       } else {
-        alert(data.error || 'Failed to create customer')
+        toast({
+          variant: "destructive",
+          title: "Creation Failed",
+          description: data.error || "Failed to create customer"
+        })
       }
     } catch (error) {
       console.error('Error creating customer:', error)
-      alert('Failed to create customer')
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to create customer"
+      })
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleExportUsers = async () => {
+    try {
+      setIsExporting(true)
+      
+      if (filteredUsers.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No Data",
+          description: "No users available to export"
+        })
+        return
+      }
+      
+      bulkExport({
+        data: filteredUsers,
+        type: 'users'
+      })
+      
+      toast({
+        variant: "success",
+        title: "Export Successful",
+        description: `Successfully exported ${filteredUsers.length} users to CSV`
+      })
+    } catch (error) {
+      console.error('Export error:', error)
+      toast({
+        variant: "destructive",
+        title: "Export Failed",
+        description: "Failed to export users data"
+      })
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -274,13 +335,35 @@ export default function UsersPage() {
               Manage customer information and loan histories.
             </p>
           </div>
+          <div className="flex gap-2">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={handleNewUser}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Customer
+                </Button>
+              </DialogTrigger>
+            </Dialog>
+            
+            <Button 
+              variant="outline" 
+              onClick={() => setIsBulkImportOpen(true)}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Bulk Import
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              onClick={handleExportUsers}
+              disabled={isExporting || filteredUsers.length === 0}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {isExporting ? 'Exporting...' : 'Export CSV'}
+            </Button>
+          </div>
+          
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={handleNewUser}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Customer
-              </Button>
-            </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Customer</DialogTitle>
@@ -344,6 +427,19 @@ export default function UsersPage() {
               </div>
             </DialogContent>
           </Dialog>
+          
+          <BulkImportModal
+            isOpen={isBulkImportOpen}
+            onClose={() => setIsBulkImportOpen(false)}
+            onSuccess={() => {
+              fetchUsers()
+              toast({
+                variant: "success",
+                title: "Import Complete",
+                description: "Users have been imported successfully"
+              })
+            }}
+          />
         </div>
 
         <div className="flex gap-4">
