@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, Check, X, Search, Filter, ChevronLeft, ChevronRight, Download, ExternalLink, Edit, Trash2, AlertCircle } from "lucide-react"
+import { Eye, Check, X, Search, Filter, ChevronLeft, ChevronRight, Download, ExternalLink, Edit, Trash2, AlertCircle, CheckCircle2, XCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { bulkExport } from "@/lib/utils/export-utils"
 import { ImageGallery } from "@/components/image-gallery"
@@ -470,6 +470,48 @@ function LoanApplicationModal({
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Simple KYC Documents Section with Verify Button */}
+                                <div className="border-t pt-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="font-semibold text-gray-900">KYC Documents</h4>
+                                        <Button
+                                            onClick={() => {
+                                                if (confirm('Are you sure you want to verify KYC for this application?')) {
+                                                    handleVerify()
+                                                }
+                                            }}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                            size="sm"
+                                        >
+                                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                                            Verify Manually
+                                        </Button>
+                                    </div>
+                                    <div className="text-sm text-gray-600 mb-3">
+                                        Review the following KYC documents before verification:
+                                    </div>
+                                    <div className="space-y-4">
+                                        {['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].map(docType => {
+                                            const docData = userData[docType];
+                                            return docData ? (
+                                                <div key={docType} className="bg-gray-50 p-3 rounded">
+                                                    <ImageGallery
+                                                        files={docData}
+                                                        label={`KYC: ${formatFieldName(docType)}`}
+                                                        fieldName={docType}
+                                                        applicationId={application.id}
+                                                    />
+                                                </div>
+                                            ) : null;
+                                        })}
+                                        {['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].every(doc => !userData[doc]) && (
+                                            <div className="text-sm text-gray-500 italic">
+                                                No KYC documents uploaded
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         ) : (
                             <div className="text-sm text-gray-500">
@@ -489,7 +531,7 @@ function LoanApplicationModal({
                     </Button>
                     
                     {/* Status-based action buttons following loan workflow */}
-                    {application.status === "pending" && (
+                    {(application.status?.toLowerCase() === "pending" || application.status === "pending") && (
                         <>
                             <Button
                                 variant="destructive"
@@ -509,7 +551,7 @@ function LoanApplicationModal({
                         </>
                     )}
                     
-                    {application.status === "verification" && (
+                    {(application.status?.toLowerCase() === "verification" || application.status === "verification") && (
                         <>
                             <Button
                                 variant="destructive"
@@ -529,10 +571,18 @@ function LoanApplicationModal({
                         </>
                     )}
                     
-                    {application.status === "creating" && (
-                        <div className="text-sm text-gray-500 py-2">
-                            Application is still being created. No actions available.
-                        </div>
+                    {(application.status?.toLowerCase() === "creating" || application.status === "creating") && (
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={handleVerify}
+                                className="flex items-center gap-2"
+                                title="Move application to pending status for review"
+                            >
+                                <Eye className="h-4 w-4" />
+                                Submit for Review
+                            </Button>
+                        </>
                     )}
                     
                     {(application.status === "approved" || application.status === "rejected") && (
@@ -540,6 +590,36 @@ function LoanApplicationModal({
                             Application has been {application.status}. No further actions needed.
                         </div>
                     )}
+                    
+                    {/* Fallback for any unhandled status */}
+                    {!["pending", "verification", "creating", "approved", "rejected"].includes(application.status?.toLowerCase() || application.status || "") && (
+                        <>
+                            <div className="text-sm text-yellow-600 py-2">
+                                Unknown status: "{application.status}". Available actions:
+                            </div>
+                            <Button
+                                variant="outline"
+                                onClick={handleVerify}
+                                className="flex items-center gap-2"
+                            >
+                                <Eye className="h-4 w-4" />
+                                Move to Verification
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={handleReject}
+                                className="flex items-center gap-2"
+                            >
+                                <X className="h-4 w-4" />
+                                Reject
+                            </Button>
+                        </>
+                    )}
+                    
+                    {/* Debug info - shows actual status value */}
+                    <div className="text-xs text-gray-400 border-t pt-2 mt-2">
+                        Debug: Status = "{application.status}" | Type: {typeof application.status}
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

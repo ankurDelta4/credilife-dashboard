@@ -247,6 +247,48 @@ export default function LoanApplicationDetailsPage({
         }
     }
 
+    const handleVerifyKYC = async () => {
+        if (!confirm('Are you sure you want to verify KYC for this application?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/loans/${id}/verify`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    status: 'verification'
+                })
+            })
+
+            const data = await response.json()
+            
+            if (data.success) {
+                setApplication(prev => prev ? { ...prev, status: "verification" as any } : null)
+                toast({
+                    variant: "success",
+                    title: "KYC Verified",
+                    description: "Application moved to verification stage"
+                })
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Verification Failed",
+                    description: data.error || "Failed to verify KYC"
+                })
+            }
+        } catch (error) {
+            console.error("Error verifying KYC:", error)
+            toast({
+                variant: "destructive",
+                title: "Verification Failed",
+                description: "An error occurred while verifying KYC"
+            })
+        }
+    }
+
     if (loading) {
         return (
             <DashboardLayout>
@@ -616,6 +658,44 @@ export default function LoanApplicationDetailsPage({
                                         .filter(key => key in userData && isDocumentField(key)).length === 0 && (
                                         <div className="text-sm text-gray-500 italic">
                                             No documents uploaded
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* KYC Documents Section with Verify Button */}
+                            <div className="border-t pt-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h4 className="font-semibold text-gray-900">KYC Documents</h4>
+                                    <Button
+                                        onClick={() => handleVerifyKYC()}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                        size="sm"
+                                    >
+                                        <Check className="h-4 w-4 mr-2" />
+                                        Verify Manually
+                                    </Button>
+                                </div>
+                                <div className="text-sm text-gray-600 mb-3">
+                                    Review the following KYC documents before verification:
+                                </div>
+                                <div className="space-y-4">
+                                    {['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].map(docType => {
+                                        const docData = userData && userData[docType];
+                                        return docData ? (
+                                            <div key={docType} className="bg-gray-50 p-3 rounded">
+                                                <ImageGallery
+                                                    files={docData}
+                                                    label={`KYC: ${formatFieldName(docType)}`}
+                                                    fieldName={docType}
+                                                    applicationId={application.id}
+                                                />
+                                            </div>
+                                        ) : null;
+                                    })}
+                                    {userData && ['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].every(doc => !userData[doc]) && (
+                                        <div className="text-sm text-gray-500 italic">
+                                            No KYC documents uploaded
                                         </div>
                                     )}
                                 </div>
