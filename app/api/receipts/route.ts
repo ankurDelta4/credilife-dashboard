@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
         
         try {
-            const backendResponse = await fetch(`${backendUrl}/payment_receipts?select=*,installments(id,loan_id,loans(id,user_id, principal_amount, users(id, name)))&order=received_at.desc`, {
+            const backendResponse = await fetch(`${backendUrl}/payment_receipts?select=*,installments(id,loan_id,loans(id,user_id, principal_amount, total_repayment, users(id, name)))&order=received_at.desc`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -80,11 +80,13 @@ export async function GET(request: NextRequest) {
                         return {
                             id: item.id,
                             username: item.installments.loans.users.name || 'N/A',
-                            loanAmount: item.installments.loans.principal_amount || 0,
+                            principalAmount: item.installments.loans.principal_amount || 0,
+                            totalRepayment: item.installments.loans.total_repayment || 0,
                             receiptImage: item.file_url || '',
                             status: item.payment_confirmed ? 'approved' : 'pending',
                             submittedDate: item.received_at || item.created_at || item.submittedDate,
-                            loanId: item.loan_id || item.loanId
+                            loanId: item.installments.loan_id || item.loanId,
+                            amountPaid: item.amount || 0
                         };
                     });
                     
@@ -116,33 +118,23 @@ export async function GET(request: NextRequest) {
                 }
             }
         } catch (backendError) {
-            console.log("Backend API error, using fallback data:", backendError);
+            console.log("Backend API error, no data available:", backendError);
         }
 
-        // Fallback to mock data
-        let filteredData = receipts;
-
-        if (status) {
-            filteredData = filteredData.filter((item: any) => item.status === status);
-        }
-
-        // Apply pagination
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const paginatedData = filteredData.slice(startIndex, endIndex);
-
+        // Return no data available instead of fallback
         return NextResponse.json({
             success: true,
             data: {
-                receipts: paginatedData,
+                receipts: [],
                 pagination: {
                     page,
                     limit,
-                    total: filteredData.length,
-                    totalPages: Math.ceil(filteredData.length / limit)
+                    total: 0,
+                    totalPages: 0
                 }
             },
-            message: 'Receipts retrieved successfully (fallback)'
+            message: 'No receipts data available',
+            isEmpty: true
         });
 
     } catch (error) {
@@ -215,6 +207,20 @@ export async function PATCH(request: NextRequest) {
                     
                     if (installment && loan) {
                         // Update payment_receipts table
+                        let receiptUpdateBody: any = {
+                            payment_confirmed: paymentConfirmed,
+                            updated_at: new Date().toISOString()
+                        };
+                        
+                        // If approved, also set amount_paid, paid_at, and status
+                        if (paymentConfirmed) {
+                            receiptUpdateBody.amount_paid = receipt.amount || 0;
+                            receiptUpdateBody.paid_at = new Date().toISOString();
+                            receiptUpdateBody.status = 'approved';
+                        } else {
+                            receiptUpdateBody.status = status; // Set to 'rejected' or other status
+                        }
+                        
                         const updateReceiptResponse = await fetch(`${backendUrl}/payment_receipts?id=eq.${receiptId}`, {
                             method: 'PATCH',
                             headers: {
@@ -222,10 +228,7 @@ export async function PATCH(request: NextRequest) {
                                 'apikey': `${process.env.API_KEY || ''}`,
                                 'Authorization': `Bearer ${process.env.API_KEY || ''}`,
                             },
-                            body: JSON.stringify({ 
-                                payment_confirmed: paymentConfirmed,
-                                updated_at: new Date().toISOString() 
-                            })
+                            body: JSON.stringify(receiptUpdateBody)
                         });
                         console.log(`Updated receipt ${receiptId} payment_confirmed to ${paymentConfirmed}, updateReceiptResponse: ${updateReceiptResponse.status}`);
 
@@ -239,15 +242,23 @@ export async function PATCH(request: NextRequest) {
                         if (paymentConfirmed) {
                             const currentAmountPaid = installment.amount_paid || 0;
                             const currentAmountDue = installment.amount_due || 0;
-                            const paymentAmount = receipt.payment_amount || 0; // Amount from the receipt
+                            const paymentAmount = receipt.amount || 0; // Amount from the receipt
                             
                             const newAmountPaid = currentAmountPaid + paymentAmount;
                             const newAmountDue = Math.max(0, currentAmountDue - paymentAmount); // Ensure it doesn't go negative
                             
                             installmentUpdateBody.amount_paid = newAmountPaid;
                             installmentUpdateBody.amount_due = newAmountDue;
+                            installmentUpdateBody.paid_at = new Date().toISOString();
                             
-                            console.log(`Installment ${installment.id}: amount_paid ${currentAmountPaid} -> ${newAmountPaid}, amount_due ${currentAmountDue} -> ${newAmountDue}`);
+                            // Update installment status based on payment
+                            if (newAmountDue <= 0) {
+                                installmentUpdateBody.status = 'paid';
+                            } else {
+                                installmentUpdateBody.status = 'partial';
+                            }
+                            
+                            console.log(`Installment ${installment.id}: amount_paid ${currentAmountPaid} -> ${newAmountPaid}, amount_due ${currentAmountDue} -> ${newAmountDue}, status: ${installmentUpdateBody.status}`);
                         }
                         
                         const updateInstallmentResponse = await fetch(`${backendUrl}/installments?id=eq.${installment.id}`, {

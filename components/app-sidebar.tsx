@@ -8,7 +8,8 @@ import {
   DollarSign,
   FileText,
   LogOut,
-  User
+  User,
+  Bell
 } from "lucide-react"
 import {
   Sidebar,
@@ -56,6 +57,11 @@ const menuItems = [
     title: "Loan Applications",
     url: "/loan-applications",
     icon: FileText,
+  },
+  {
+    title: "Notifications",
+    url: "/notifications",
+    icon: Bell,
   }
 ]
 

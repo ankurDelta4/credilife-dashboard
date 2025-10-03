@@ -159,6 +159,7 @@ export async function POST(
                 amount_paid: remainingAmount,
                 payment_verified: true,
                 paid_at: settlementDate,
+                status: 'settled',
                 created_at: settlementDate,
                 updated_at: settlementDate,
                 due_date: settlementDate,
@@ -234,7 +235,8 @@ export async function POST(
                         amount_paid: updatedAmountPaid,
                         payment_verified: true,
                         paid_at: settlementDate,
-                        updated_at: settlementDate
+                        updated_at: settlementDate,
+                        status: 'settled'
                     })
                 });
 

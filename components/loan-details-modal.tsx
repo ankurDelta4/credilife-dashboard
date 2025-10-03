@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, DollarSign, TrendingUp, User, Clock, CheckCircle2, AlertCircle, HandCoins, XCircle } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Calendar, DollarSign, TrendingUp, User, Clock, CheckCircle2, AlertCircle, HandCoins, XCircle, FileText } from "lucide-react"
 
 interface LoanDetailsModalProps {
     isOpen: boolean
@@ -26,6 +27,8 @@ export function LoanDetailsModal({
     loan,
 }: LoanDetailsModalProps) {
     const [loanDetails, setLoanDetails] = useState<any>(null)
+    const [installments, setInstallments] = useState<any[]>([])
+    const [installmentsLoading, setInstallmentsLoading] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [showSettlementDialog, setShowSettlementDialog] = useState(false)
@@ -35,6 +38,7 @@ export function LoanDetailsModal({
     useEffect(() => {
         if (loan && isOpen) {
             fetchLoanDetails()
+            fetchInstallments()
         }
     }, [loan?.id, isOpen])
 
@@ -60,6 +64,28 @@ export function LoanDetailsModal({
         }
     }
 
+    const fetchInstallments = async () => {
+        if (!loan?.id) return
+        
+        try {
+            setInstallmentsLoading(true)
+            const response = await fetch(`/api/loans/${loan.id}/installments`)
+            const data = await response.json()
+            
+            if (data.success) {
+                setInstallments(data.data || [])
+            } else {
+                console.error('Failed to fetch installments:', data.error)
+                setInstallments([])
+            }
+        } catch (err) {
+            console.error('Error fetching installments:', err)
+            setInstallments([])
+        } finally {
+            setInstallmentsLoading(false)
+        }
+    }
+
     if (!loan) return null
 
     // Calculate loan details using real Supabase data
@@ -82,30 +108,30 @@ export function LoanDetailsModal({
         
         // Calculate paid installments from installments data
         const paidInstallments = installmentsData.filter((inst: any) => inst.payment_verified === true).length
-        const remainingInstallments = totalInstallments - paidInstallments
+        const remainingInstallments = Math.max(0, totalInstallments - paidInstallments)
         
         // Calculate installment amount
         const installmentAmount = totalInstallments > 0 ? totalAmount / totalInstallments : 0
         
-        const remainingAmount = totalAmount - paidAmount
+        const remainingAmount = Math.max(0, totalAmount - paidAmount)
         const progressPercentage = totalInstallments > 0 ? (paidInstallments / totalInstallments) * 100 : 0
 
         // Calculate interest rate based on actual data
         const monthlyRatePercent = principalAmount > 0 ? ((totalInterest / principalAmount) / termMonths * 100).toFixed(2) : "0.00"
 
         return {
-            emi: Math.round(installmentAmount),
-            totalAmount: Math.round(totalAmount),
-            totalInterest: Math.round(totalInterest),
-            closingFee: Math.round(closingFee),
-            paidEMIs: paidInstallments,
-            remainingEMIs: remainingInstallments,
-            paidAmount: Math.round(paidAmount),
-            remainingAmount: Math.round(remainingAmount),
-            progressPercentage: Math.round(progressPercentage),
+            emi: Math.max(0, Math.round(installmentAmount)),
+            totalAmount: Math.max(0, Math.round(totalAmount)),
+            totalInterest: Math.max(0, Math.round(totalInterest)),
+            closingFee: Math.max(0, Math.round(closingFee)),
+            paidEMIs: Math.max(0, paidInstallments),
+            remainingEMIs: Math.max(0, remainingInstallments),
+            paidAmount: Math.max(0, Math.round(paidAmount)),
+            remainingAmount: Math.max(0, Math.round(remainingAmount)),
+            progressPercentage: Math.max(0, Math.min(100, Math.round(progressPercentage))),
             termMonths,
             installments: totalInstallments,
-            principalAmount,
+            principalAmount: Math.max(0, principalAmount),
             monthlyRatePercent,
             installmentsData
         }
@@ -134,16 +160,28 @@ export function LoanDetailsModal({
 
     const getStatusColor = (status: string) => {
         const colors = {
-            active: "bg-green-100 text-green-800",
-            running: "bg-green-100 text-green-800",
-            pending: "bg-yellow-100 text-yellow-800",
-            overdue: "bg-red-100 text-red-800",
-            completed: "bg-green-100 text-green-800",
-            settled: "bg-green-100 text-green-800",
-            terminated: "bg-red-100 text-red-800",
-            rejected: "bg-red-100 text-red-800",
+            active: "bg-gray-100 text-gray-700",
+            running: "bg-gray-100 text-gray-700",
+            pending: "bg-gray-100 text-gray-600",
+            overdue: "bg-gray-200 text-gray-800",
+            completed: "bg-gray-100 text-gray-700",
+            settled: "bg-gray-100 text-gray-700",
+            terminated: "bg-gray-200 text-gray-800",
+            rejected: "bg-gray-200 text-gray-800",
+            paid: "bg-gray-100 text-gray-700",
+            partial: "bg-gray-150 text-gray-700"
         }
-        return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
+        return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-700"
+    }
+
+    const getInstallmentStatusIcon = (installment: any) => {
+        if (installment.payment_verified) {
+            return <CheckCircle2 className="h-4 w-4 text-gray-600" />
+        } else if (installment.status === 'overdue') {
+            return <AlertCircle className="h-4 w-4 text-gray-700" />
+        } else {
+            return <Clock className="h-4 w-4 text-gray-500" />
+        }
     }
 
     const handleSettlement = async () => {
@@ -382,6 +420,141 @@ export function LoanDetailsModal({
     
                         {/* Additional space for better layout on larger screens */}
                         <div className="hidden lg:block"></div>
+                    </CardContent>
+                </Card>
+
+                {/* Installments Section */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <FileText className="h-5 w-5" />
+                            Installment Schedule
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {installmentsLoading ? (
+                            <div className="flex justify-center items-center py-8">
+                                <div className="text-muted-foreground">Loading installments...</div>
+                            </div>
+                        ) : installments.length > 0 ? (
+                            <div className="space-y-4">
+                                {/* Installments Summary */}
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+                                    <div className="text-center p-3 bg-gray-50 rounded-lg border">
+                                        <p className="text-sm font-medium text-gray-600">Paid</p>
+                                        <p className="text-xl font-bold text-gray-900">
+                                            {installments.filter(i => i.payment_verified).length}
+                                        </p>
+                                    </div>
+                                    <div className="text-center p-3 bg-gray-50 rounded-lg border">
+                                        <p className="text-sm font-medium text-gray-600">Pending</p>
+                                        <p className="text-xl font-bold text-gray-900">
+                                            {installments.filter(i => !i.payment_verified && i.status === 'pending').length}
+                                        </p>
+                                    </div>
+                                    <div className="text-center p-3 bg-gray-50 rounded-lg border">
+                                        <p className="text-sm font-medium text-gray-600">Overdue</p>
+                                        <p className="text-xl font-bold text-gray-900">
+                                            {installments.filter(i => i.status === 'overdue').length}
+                                        </p>
+                                    </div>
+                                    <div className="text-center p-3 bg-gray-50 rounded-lg border">
+                                        <p className="text-sm font-medium text-gray-600">Total</p>
+                                        <p className="text-xl font-bold text-gray-900">{installments.length}</p>
+                                    </div>
+                                </div>
+
+                                {/* Installments Table */}
+                                <div className="border rounded-lg overflow-hidden">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-16">No.</TableHead>
+                                                <TableHead>Due Date</TableHead>
+                                                <TableHead>Amount Due</TableHead>
+                                                <TableHead>Amount Paid</TableHead>
+                                                <TableHead>Status</TableHead>
+                                                <TableHead>Paid Date</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {installments.map((installment, index) => (
+                                                <TableRow key={installment.id || index} className="hover:bg-gray-50">
+                                                    <TableCell className="font-medium">
+                                                        <div className="flex items-center gap-2">
+                                                            {getInstallmentStatusIcon(installment)}
+                                                            #{installment.installment_number || index + 1}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {formatDate(installment.due_date)}
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">
+                                                        {formatCurrency(Math.max(0, installment.amount_due || 0))}
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">
+                                                        {formatCurrency(Math.max(0, installment.amount_paid || 0))}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge className={getStatusColor(installment.status || 'pending')}>
+                                                            {installment.payment_verified ? 'Paid' : 
+                                                             installment.status === 'overdue' ? 'Overdue' :
+                                                             installment.status === 'settled' ? 'Settled' :
+                                                             installment.status || 'Pending'}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm text-gray-600">
+                                                        {installment.paid_at ? formatDate(installment.paid_at) : '-'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {/* Next Due Installment */}
+                                {(() => {
+                                    const nextDue = installments.find(i => !i.payment_verified && i.status !== 'overdue')
+                                    const overdue = installments.find(i => i.status === 'overdue')
+                                    const targetInstallment = overdue || nextDue
+
+                                    if (targetInstallment) {
+                                        return (
+                                            <div className={`p-4 rounded-lg border ${
+                                                overdue ? 'bg-gray-100 border-gray-300' : 'bg-gray-50 border-gray-200'
+                                            }`}>
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <h4 className="font-medium text-gray-800">
+                                                            {overdue ? 'Overdue Payment' : 'Next Payment Due'}
+                                                        </h4>
+                                                        <p className="text-sm text-gray-600 mt-1">
+                                                            Installment #{targetInstallment.installment_number || '?'} • 
+                                                            Due: {formatDate(targetInstallment.due_date)} • 
+                                                            Amount: {formatCurrency(Math.max(0, targetInstallment.amount_due || 0))}
+                                                        </p>
+                                                    </div>
+                                                    {overdue && (
+                                                        <div className="text-right">
+                                                            <span className="text-xs text-gray-700 font-medium">
+                                                                OVERDUE
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+                                    return null
+                                })()}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-gray-500">
+                                <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                                <p>No installments found for this loan</p>
+                                <p className="text-sm">Installments will appear here once the loan is approved</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

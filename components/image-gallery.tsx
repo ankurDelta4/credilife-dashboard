@@ -40,9 +40,9 @@ function ImageViewModal({ isOpen, onClose, imageUrl, imageName, onDownload }: Im
           >
             <X className="h-4 w-4" />
           </Button>
-          <div className="flex flex-col items-center space-y-4">
+          <div className="flex flex-col items-center space-y-4 overflow-hidden">
             <div className="text-center">
-              <h3 className="text-lg font-semibold mb-2">{imageName}</h3>
+              <h3 className="text-lg font-semibold mb-2 truncate max-w-md" title={imageName}>{imageName}</h3>
               <Button
                 onClick={onDownload}
                 className="flex items-center gap-2"
@@ -52,7 +52,7 @@ function ImageViewModal({ isOpen, onClose, imageUrl, imageName, onDownload }: Im
                 Download
               </Button>
             </div>
-            <div className="w-full flex justify-center">
+            <div className="w-full flex justify-center overflow-hidden">
               <img
                 src={imageUrl}
                 alt={imageName}
@@ -67,10 +67,10 @@ function ImageViewModal({ isOpen, onClose, imageUrl, imageName, onDownload }: Im
                   }
                 }}
               />
-              <div className="hidden flex-col items-center justify-center p-8 bg-gray-100 rounded-lg min-h-[300px]">
+              <div className="hidden flex-col items-center justify-center p-8 bg-gray-100 rounded-lg min-h-[300px] max-w-full">
                 <FileText className="h-16 w-16 text-gray-400 mb-4" />
                 <p className="text-gray-600">Cannot preview this file</p>
-                <p className="text-sm text-gray-500 mt-2">Click download to view the file</p>
+                <p className="text-sm text-gray-500 mt-2 text-center">Click download to view the file</p>
               </div>
             </div>
           </div>
@@ -195,7 +195,7 @@ export function ImageGallery({ files, label, fieldName, applicationId }: ImageGa
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 overflow-hidden">
       <h4 className="font-medium text-sm text-gray-700">
         {label} ({processedFiles.length} file{processedFiles.length !== 1 ? 's' : ''})
       </h4>
@@ -206,23 +206,23 @@ export function ImageGallery({ files, label, fieldName, applicationId }: ImageGa
             key={index}
             className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
           >
-            <div className="flex items-center space-x-2 mb-2">
+            <div className="flex items-center space-x-2 mb-2 min-w-0">
               {file.type === 'image' ? (
-                <ImageIcon className="h-4 w-4 text-blue-500" />
+                <ImageIcon className="h-4 w-4 text-blue-500 flex-shrink-0" />
               ) : (
-                <FileText className="h-4 w-4 text-red-500" />
+                <FileText className="h-4 w-4 text-red-500 flex-shrink-0" />
               )}
-              <span className="text-sm font-medium truncate flex-1" title={file.name}>
+              <span className="text-sm font-medium truncate" title={file.name}>
                 {file.name}
               </span>
             </div>
             
             {file.type === 'image' && (
-              <div className="mb-2">
+              <div className="mb-2 overflow-hidden rounded">
                 <img
                   src={file.url}
                   alt={file.name}
-                  className="w-full h-20 object-cover rounded cursor-pointer"
+                  className="w-full h-20 object-cover bg-gray-100 rounded cursor-pointer"
                   onClick={() => handleView(file.url, file.name)}
                   onError={(e) => {
                     const target = e.target as HTMLImageElement
@@ -230,7 +230,7 @@ export function ImageGallery({ files, label, fieldName, applicationId }: ImageGa
                     const parent = target.parentElement
                     if (parent) {
                       parent.innerHTML = `
-                        <div class="w-full h-20 bg-gray-200 rounded flex items-center justify-center text-gray-500 text-xs">
+                        <div class="w-full h-20 bg-gray-200 rounded flex items-center justify-center text-gray-500 text-xs cursor-pointer">
                           <div class="text-center">
                             <div>Image unavailable</div>
                             <div class="text-xs mt-1">Click to try download</div>
@@ -248,20 +248,20 @@ export function ImageGallery({ files, label, fieldName, applicationId }: ImageGa
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 text-xs"
+                className="flex-1 text-xs min-w-0"
                 onClick={() => handleView(file.url, file.name)}
               >
-                <Eye className="h-3 w-3 mr-1" />
-                View
+                <Eye className="h-3 w-3 mr-1 flex-shrink-0" />
+                <span className="truncate">View</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 text-xs"
+                className="flex-1 text-xs min-w-0"
                 onClick={() => handleDownload(file.url, file.name)}
               >
-                <Download className="h-3 w-3 mr-1" />
-                Download
+                <Download className="h-3 w-3 mr-1 flex-shrink-0" />
+                <span className="truncate">Download</span>
               </Button>
             </div>
           </div>

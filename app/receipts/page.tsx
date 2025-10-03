@@ -36,7 +36,9 @@ import { ImageGallery } from "@/components/image-gallery"
 interface Receipt {
     id: string | number
     username: string
-    loanAmount: number
+    principalAmount: number
+    totalRepayment: number
+    amountPaid: number
     receiptImage: string
     status: "pending" | "approved" | "rejected"
     submittedDate: string
@@ -48,7 +50,9 @@ const mockReceipts: Receipt[] = [
     {
         id: "R001",
         username: "Alice Johnson",
-        loanAmount: 50000,
+        principalAmount: 50000,
+        totalRepayment: 60000,
+        amountPaid: 1500,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "pending",
         submittedDate: "2024-09-19",
@@ -57,7 +61,9 @@ const mockReceipts: Receipt[] = [
     {
         id: "R002",
         username: "Bob Smith",
-        loanAmount: 25000,
+        principalAmount: 25000,
+        totalRepayment: 30000,
+        amountPaid: 800,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "pending",
         submittedDate: "2024-09-18",
@@ -66,7 +72,9 @@ const mockReceipts: Receipt[] = [
     {
         id: "R003",
         username: "Carol Davis",
-        loanAmount: 75000,
+        principalAmount: 75000,
+        totalRepayment: 90000,
+        amountPaid: 2500,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "approved",
         submittedDate: "2024-09-17",
@@ -75,7 +83,9 @@ const mockReceipts: Receipt[] = [
     {
         id: "R004",
         username: "David Wilson",
-        loanAmount: 30000,
+        principalAmount: 30000,
+        totalRepayment: 36000,
+        amountPaid: 1200,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "rejected",
         submittedDate: "2024-09-16",
@@ -84,7 +94,9 @@ const mockReceipts: Receipt[] = [
     {
         id: "R005",
         username: "Eva Brown",
-        loanAmount: 15000,
+        principalAmount: 15000,
+        totalRepayment: 18000,
+        amountPaid: 600,
         receiptImage: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=400&h=300&fit=crop",
         status: "pending",
         submittedDate: "2024-09-15",
@@ -120,7 +132,7 @@ function ReceiptModal({ receipt, isOpen, onClose, onApprove, onReject }: Receipt
                 <DialogHeader>
                     <DialogTitle>Receipt Review</DialogTitle>
                     <DialogDescription>
-                        Review the receipt for {receipt.username} - Loan Amount: ${receipt.loanAmount.toLocaleString()}
+                        Review the receipt for {receipt.username} - Payment Amount: ${receipt.amountPaid.toLocaleString()}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -139,7 +151,13 @@ function ReceiptModal({ receipt, isOpen, onClose, onApprove, onReject }: Receipt
                             <span className="font-medium">Username:</span> {receipt.username}
                         </div>
                         <div>
-                            <span className="font-medium">Loan Amount:</span> ${receipt.loanAmount.toLocaleString()}
+                            <span className="font-medium">Payment Amount:</span> ${receipt.amountPaid.toLocaleString()}
+                        </div>
+                        <div>
+                            <span className="font-medium">Principal Amount:</span> ${receipt.principalAmount.toLocaleString()}
+                        </div>
+                        <div>
+                            <span className="font-medium">Total Repayment:</span> ${receipt.totalRepayment.toLocaleString()}
                         </div>
                         <div>
                             <span className="font-medium">Submitted Date:</span> {new Date(receipt.submittedDate).toLocaleDateString('en-US')}
@@ -223,7 +241,8 @@ function ReceiptsTable({ receipts, onViewReceipt }: ReceiptsTableProps) {
                 <TableHeader>
                     <TableRow>
                         <TableHead>Username</TableHead>
-                        <TableHead>Loan Amount</TableHead>
+                        <TableHead>Payment Amount</TableHead>
+                        <TableHead>Principal Amount</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Submitted Date</TableHead>
                         <TableHead>Actions</TableHead>
@@ -232,7 +251,7 @@ function ReceiptsTable({ receipts, onViewReceipt }: ReceiptsTableProps) {
                 <TableBody>
                     {receipts.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-24 text-center">
+                            <TableCell colSpan={6} className="h-24 text-center">
                                 No receipts found.
                             </TableCell>
                         </TableRow>
@@ -240,7 +259,8 @@ function ReceiptsTable({ receipts, onViewReceipt }: ReceiptsTableProps) {
                         receipts.map((receipt) => (
                             <TableRow key={receipt.id}>
                                 <TableCell className="font-medium">{receipt.username}</TableCell>
-                                <TableCell>{formatCurrency(receipt.loanAmount)}</TableCell>
+                                <TableCell>{formatCurrency(receipt.amountPaid)}</TableCell>
+                                <TableCell>{formatCurrency(receipt.principalAmount)}</TableCell>
                                 <TableCell>{getStatusBadge(receipt.status)}</TableCell>
                                 <TableCell>{new Date(receipt.submittedDate).toLocaleDateString('en-US')}</TableCell>
                                 <TableCell>
@@ -326,7 +346,9 @@ export default function Receipts() {
                 id: receipt.id,
                 customer_name: receipt.username,
                 loan_id: receipt.loanId,
-                payment_amount: receipt.loanAmount,
+                payment_amount: receipt.amountPaid,
+                principal_amount: receipt.principalAmount,
+                total_repayment: receipt.totalRepayment,
                 status: receipt.status,
                 payment_date: receipt.submittedDate,
                 created_at: receipt.submittedDate

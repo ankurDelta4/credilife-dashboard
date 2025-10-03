@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import {
     Table,
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, Check, X, Search, Filter, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
+import { Eye, Check, X, Search, Filter, ChevronLeft, ChevronRight, Download, ExternalLink, Edit, Trash2, AlertCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { bulkExport } from "@/lib/utils/export-utils"
 import { ImageGallery } from "@/components/image-gallery"
@@ -39,7 +40,7 @@ interface LoanApplication {
     customerName: string
     email: string
     amount: number
-    status: "creating" | "pending" | "approved" | "rejected"
+    status: "creating" | "pending" | "verification" | "approved" | "rejected"
     tenure: number | string
     repaymentType: string
     submitDate: string
@@ -57,13 +58,15 @@ function LoanApplicationModal({
     isOpen, 
     onClose, 
     onApprove, 
-    onReject 
+    onReject,
+    onVerify 
 }: {
     application: LoanApplication | null
     isOpen: boolean
     onClose: () => void
     onApprove: (applicationId: string | number) => void
     onReject: (applicationId: string | number) => void
+    onVerify: (applicationId: string | number) => void
 }) {
     if (!application) return null
 
@@ -74,6 +77,11 @@ function LoanApplicationModal({
 
     const handleReject = () => {
         onReject(application.id)
+        onClose()
+    }
+
+    const handleVerify = () => {
+        onVerify(application.id)
         onClose()
     }
 
@@ -267,6 +275,7 @@ function LoanApplicationModal({
                                 <Badge className={`ml-2 ${
                                     application.status === "creating" ? "bg-blue-100 text-blue-800" :
                                     application.status === "pending" ? "bg-yellow-100 text-yellow-800" :
+                                    application.status === "verification" ? "bg-purple-100 text-purple-800" :
                                     application.status === "approved" ? "bg-green-100 text-green-800" :
                                     application.status === "rejected" ? "bg-red-100 text-red-800" :
                                     "bg-gray-100 text-gray-800"
@@ -342,13 +351,105 @@ function LoanApplicationModal({
                                         ))}
                                 </div>
                                 
-                                {/* Documents Section */}
+                                {/* KYC Documents Section */}
                                 <div className="border-t pt-4">
-                                    <h4 className="font-semibold mb-4 text-gray-900">Uploaded Documents</h4>
-                                    <div className="space-y-6">
+                                    <h4 className="font-semibold mb-4 text-gray-900">KYC Documents</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {/* Identity Verification Documents */}
+                                        <div className="space-y-4">
+                                            <h5 className="font-medium text-gray-800 text-sm">Identity Verification</h5>
+                                            {['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card'].map(docType => {
+                                                const docData = userData[docType];
+                                                return docData ? (
+                                                    <div key={docType} className="bg-white border rounded-lg p-3">
+                                                        <ImageGallery
+                                                            files={docData}
+                                                            label={formatFieldName(docType)}
+                                                            fieldName={docType}
+                                                            applicationId={application.id}
+                                                        />
+                                                    </div>
+                                                ) : null;
+                                            })}
+                                        </div>
+                                        
+                                        {/* Address & Financial Documents */}
+                                        <div className="space-y-4">
+                                            <h5 className="font-medium text-gray-800 text-sm">Address & Financial Verification</h5>
+                                            {['address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].map(docType => {
+                                                const docData = userData[docType];
+                                                return docData ? (
+                                                    <div key={docType} className="bg-white border rounded-lg p-3">
+                                                        <ImageGallery
+                                                            files={docData}
+                                                            label={formatFieldName(docType)}
+                                                            fieldName={docType}
+                                                            applicationId={application.id}
+                                                        />
+                                                    </div>
+                                                ) : null;
+                                            })}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* KYC Status Summary */}
+                                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                                        <h5 className="font-medium text-gray-800 mb-3">KYC Verification Status</h5>
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div className="flex justify-between">
+                                                <span>Identity Documents:</span>
+                                                <Badge className={`${
+                                                    ['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card'].some(doc => userData[doc]) 
+                                                        ? 'bg-green-100 text-green-800' 
+                                                        : 'bg-red-100 text-red-800'
+                                                }`}>
+                                                    {['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card'].some(doc => userData[doc]) ? 'Submitted' : 'Missing'}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Address Proof:</span>
+                                                <Badge className={`${
+                                                    ['address_proof', 'utility_bill'].some(doc => userData[doc]) 
+                                                        ? 'bg-green-100 text-green-800' 
+                                                        : 'bg-red-100 text-red-800'
+                                                }`}>
+                                                    {['address_proof', 'utility_bill'].some(doc => userData[doc]) ? 'Submitted' : 'Missing'}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Financial Documents:</span>
+                                                <Badge className={`${
+                                                    ['bank_statement', 'salary_slip', 'income_certificate'].some(doc => userData[doc]) 
+                                                        ? 'bg-green-100 text-green-800' 
+                                                        : 'bg-red-100 text-red-800'
+                                                }`}>
+                                                    {['bank_statement', 'salary_slip', 'income_certificate'].some(doc => userData[doc]) ? 'Submitted' : 'Missing'}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Overall KYC Status:</span>
+                                                <Badge className={`${
+                                                    application.status === 'verification' || application.status === 'approved' 
+                                                        ? 'bg-blue-100 text-blue-800' 
+                                                        : 'bg-yellow-100 text-yellow-800'
+                                                }`}>
+                                                    {application.status === 'verification' ? 'Under Review' : 
+                                                     application.status === 'approved' ? 'Verified' : 'Pending Review'}
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Other Documents Section */}
+                                <div className="border-t pt-4">
+                                    <h4 className="font-semibold mb-4 text-gray-900">Other Documents</h4>
+                                    <div className="space-y-6 overflow-x-hidden">
                                         {[...userDataFieldOrder, ...Object.keys(userData)]
                                             .filter((key, index, arr) => arr.indexOf(key) === index) // Remove duplicates
-                                            .filter(key => key in userData && isDocumentField(key))
+                                            .filter(key => key in userData && isDocumentField(key) && 
+                                                !['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 
+                                                  'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].includes(key))
                                             .map((key) => (
                                                 <ImageGallery
                                                     key={key}
@@ -360,9 +461,11 @@ function LoanApplicationModal({
                                             ))}
                                         {[...userDataFieldOrder, ...Object.keys(userData)]
                                             .filter((key, index, arr) => arr.indexOf(key) === index)
-                                            .filter(key => key in userData && isDocumentField(key)).length === 0 && (
+                                            .filter(key => key in userData && isDocumentField(key) && 
+                                                !['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 
+                                                  'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].includes(key)).length === 0 && (
                                             <div className="text-sm text-gray-500 italic">
-                                                No documents uploaded
+                                                No additional documents uploaded
                                             </div>
                                         )}
                                     </div>
@@ -384,7 +487,9 @@ function LoanApplicationModal({
                     >
                         Cancel
                     </Button>
-                    {application.status !== "approved" && (
+                    
+                    {/* Status-based action buttons following loan workflow */}
+                    {application.status === "pending" && (
                         <>
                             <Button
                                 variant="destructive"
@@ -392,21 +497,49 @@ function LoanApplicationModal({
                                 className="flex items-center gap-2"
                             >
                                 <X className="h-4 w-4" />
-                                Reject Loan
+                                Reject Application
                             </Button>
                             <Button
-                                onClick={handleApprove}
-                                className="flex items-center gap-2"
+                                onClick={handleVerify}
+                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
                             >
-                                <Check className="h-4 w-4" />
-                                Approve Loan
+                                <Eye className="h-4 w-4" />
+                                Start Verification
                             </Button>
                         </>
                     )}
-                    {/* Debug info - remove after testing */}
-                    <div className="text-xs text-gray-500 hidden">
-                        Status: "{application.status}" | Type: {typeof application.status}
-                    </div>
+                    
+                    {application.status === "verification" && (
+                        <>
+                            <Button
+                                variant="destructive"
+                                onClick={handleReject}
+                                className="flex items-center gap-2"
+                            >
+                                <X className="h-4 w-4" />
+                                Reject Application
+                            </Button>
+                            <Button
+                                onClick={handleApprove}
+                                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                            >
+                                <Check className="h-4 w-4" />
+                                Approve Application
+                            </Button>
+                        </>
+                    )}
+                    
+                    {application.status === "creating" && (
+                        <div className="text-sm text-gray-500 py-2">
+                            Application is still being created. No actions available.
+                        </div>
+                    )}
+                    
+                    {(application.status === "approved" || application.status === "rejected") && (
+                        <div className="text-sm text-gray-500 py-2">
+                            Application has been {application.status}. No further actions needed.
+                        </div>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -415,10 +548,14 @@ function LoanApplicationModal({
 
 function LoanApplicationsTable({ 
     applications, 
-    onViewApplication 
+    onViewApplication,
+    onEditApplication,
+    onDeleteApplication
 }: {
     applications: LoanApplication[]
     onViewApplication: (application: LoanApplication) => void
+    onEditApplication: (application: LoanApplication) => void
+    onDeleteApplication: (application: LoanApplication) => void
 }) {
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat("en-US", {
@@ -431,6 +568,7 @@ function LoanApplicationsTable({
         const statusColors = {
             creating: "bg-blue-100 text-blue-800",
             pending: "bg-yellow-100 text-yellow-800",
+            verification: "bg-purple-100 text-purple-800",
             approved: "bg-green-100 text-green-800",
             rejected: "bg-red-100 text-red-800",
         }
@@ -477,15 +615,39 @@ function LoanApplicationsTable({
                                 <TableCell>{application.tenure}</TableCell>
                                 <TableCell>{new Date(application.submitDate).toLocaleDateString('en-US')}</TableCell>
                                 <TableCell>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => onViewApplication(application)}
-                                        className="flex items-center gap-2"
-                                    >
-                                        <Eye className="h-4 w-4" />
-                                        View Details
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => onViewApplication(application)}
+                                            className="flex items-center gap-1"
+                                        >
+                                            <Eye className="h-3 w-3" />
+                                            View
+                                        </Button>
+                                        {application.status !== "approved" && (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => onEditApplication(application)}
+                                                    className="flex items-center gap-1"
+                                                >
+                                                    <Edit className="h-3 w-3" />
+                                                    Edit
+                                                </Button>
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={() => onDeleteApplication(application)}
+                                                    className="flex items-center gap-1"
+                                                >
+                                                    <Trash2 className="h-3 w-3" />
+                                                    Delete
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))
@@ -506,7 +668,10 @@ export default function LoanApplicationsPage() {
     const [statusFilter, setStatusFilter] = useState<string>("all")
     const [currentPage, setCurrentPage] = useState(1)
     const [isExporting, setIsExporting] = useState(false)
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+    const [applicationToDelete, setApplicationToDelete] = useState<LoanApplication | null>(null)
     const { toast } = useToast()
+    const router = useRouter()
     const itemsPerPage = 10
 
     useEffect(() => {
@@ -555,8 +720,53 @@ export default function LoanApplicationsPage() {
     }, [searchTerm, statusFilter])
 
     const handleViewApplication = (application: LoanApplication) => {
-        setSelectedApplication(application)
-        setIsModalOpen(true)
+        router.push(`/loan-applications/${application.id}`)
+    }
+
+    const handleEditApplication = (application: LoanApplication) => {
+        router.push(`/loan-applications/${application.id}/edit`)
+    }
+
+    const handleDeleteApplication = (application: LoanApplication) => {
+        setApplicationToDelete(application)
+        setDeleteConfirmOpen(true)
+    }
+
+    const confirmDeleteApplication = async () => {
+        if (!applicationToDelete) return
+
+        try {
+            const response = await fetch(`/api/loan-applications/${applicationToDelete.id}`, {
+                method: 'DELETE'
+            })
+            
+            const data = await response.json()
+            
+            if (data.success) {
+                setApplications(prev => prev.filter(app => app.id !== applicationToDelete.id))
+                toast({
+                    variant: "success",
+                    title: "Success",
+                    description: "Loan application deleted successfully"
+                })
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: data.error || "Failed to delete loan application"
+                })
+            }
+        } catch (error) {
+            console.error('Error deleting loan application:', error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to delete loan application"
+            })
+        } finally {
+            setDeleteConfirmOpen(false)
+            setApplicationToDelete(null)
+        }
     }
 
     const handleCloseModal = () => {
@@ -623,6 +833,50 @@ export default function LoanApplicationsPage() {
             }
         } catch (error) {
             console.error("Error rejecting loan application:", error)
+        }
+    }
+
+    const handleVerify = async (applicationId: string | number) => {
+        try {
+            const response = await fetch(`/api/loans/${applicationId}/verify`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    status: 'verification'
+                })
+            })
+
+            const data = await response.json()
+            
+            if (data.success) {
+                setApplications(prev =>
+                    prev.map(app =>
+                        app.id === applicationId
+                            ? { ...app, status: "verification" as const }
+                            : app
+                    )
+                )
+                toast({
+                    variant: "success",
+                    title: "Application Status Updated",
+                    description: "Application moved to verification stage"
+                })
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Verification Failed",
+                    description: data.error || "Failed to move application to verification"
+                })
+            }
+        } catch (error) {
+            console.error("Error verifying application:", error)
+            toast({
+                variant: "destructive",
+                title: "Verification Failed",
+                description: "An error occurred while updating application status"
+            })
         }
     }
 
@@ -719,10 +973,10 @@ export default function LoanApplicationsPage() {
                         const isActive = statusFilter === status
                         const statusStyles = {
                             all: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
-                            creating: isActive ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700 hover:bg-blue-200",
-                            pending: isActive ? "bg-yellow-600 text-white" : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200",
-                            approved: isActive ? "bg-green-600 text-white" : "bg-green-100 text-green-700 hover:bg-green-200",
-                            rejected: isActive ? "bg-red-600 text-white" : "bg-red-100 text-red-700 hover:bg-red-200",
+                            creating: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
+                            pending: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
+                            approved: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
+                            rejected: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
                         }
                         return (
                             <button
@@ -757,6 +1011,7 @@ export default function LoanApplicationsPage() {
                             <SelectItem value="all">All Status</SelectItem>
                             <SelectItem value="creating">Creating</SelectItem>
                             <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="verification">Under Verification</SelectItem>
                             <SelectItem value="approved">Approved</SelectItem>
                             <SelectItem value="rejected">Rejected</SelectItem>
                         </SelectContent>
@@ -776,6 +1031,8 @@ export default function LoanApplicationsPage() {
                         <LoanApplicationsTable
                             applications={paginatedApplications}
                             onViewApplication={handleViewApplication}
+                            onEditApplication={handleEditApplication}
+                            onDeleteApplication={handleDeleteApplication}
                         />
                         
                         {totalPages > 1 && (
@@ -854,7 +1111,32 @@ export default function LoanApplicationsPage() {
                     onClose={handleCloseModal}
                     onApprove={handleApprove}
                     onReject={handleReject}
+                    onVerify={handleVerify}
                 />
+
+                {/* Delete Confirmation Dialog */}
+                <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <AlertCircle className="h-5 w-5 text-red-500" />
+                                Confirm Deletion
+                            </DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete loan application #{applicationToDelete?.id}? 
+                                This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button variant="destructive" onClick={confirmDeleteApplication}>
+                                Delete Application
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </DashboardLayout>
     )

@@ -65,36 +65,11 @@ export async function GET(request: NextRequest) {
         
         // Determine which table to fetch from based on type parameter
         let endpoint = '';
-        let fallbackData: any[] = [];
 
         if (type === 'applications') {
-
             endpoint = `${backendUrl}/loan_applications?select=*,users(*)&order=created_at.desc`;
-            fallbackData = [
-                {
-                    id: 1,
-                    customerName: 'Frank Miller',
-                    email: 'frank.miller@email.com',
-                    amount: 40000,
-                    purpose: 'Home Improvement',
-                    status: 'pending',
-                    submitDate: '2024-09-15T10:30:00Z',
-                    creditScore: 680
-                },
-                {
-                    id: 2,
-                    customerName: 'Grace Lee',
-                    email: 'grace.lee@email.com',
-                    amount: 22000,
-                    purpose: 'Debt Consolidation',
-                    status: 'approved',
-                    submitDate: '2024-09-10T14:20:00Z',
-                    creditScore: 750
-                }
-            ];
         } else {
             endpoint = `${backendUrl}/loans?select=*,users(*)&order=created_at.desc`;
-            fallbackData = loans;
         }
         
         try {
@@ -205,11 +180,11 @@ export async function GET(request: NextRequest) {
                 }
             }
         } catch (backendError) {
-            console.log("Backend API error, using fallback data:", backendError);
+            console.log("Backend API error, no data available:", backendError);
         }
 
-        // Fallback to mock data
-        let filteredData = fallbackData;
+        // Return no data available instead of fallback
+        let filteredData: any[] = [];
 
         if (status) {
             filteredData = filteredData.filter((item: any) => item.status === status);
@@ -228,7 +203,7 @@ export async function GET(request: NextRequest) {
         const paginatedData = filteredData.slice(startIndex, endIndex);
 
         const responseKey = type === 'applications' ? 'applications' : 'loans';
-        const responseMessage = type === 'applications' ? 'Loan applications retrieved successfully (fallback)' : 'Loans retrieved successfully (fallback)';
+        const responseMessage = type === 'applications' ? 'No loan applications data available' : 'No loans data available';
 
         return NextResponse.json({
             success: true,
@@ -241,7 +216,8 @@ export async function GET(request: NextRequest) {
                     totalPages: Math.ceil(filteredData.length / limit)
                 }
             },
-            message: responseMessage
+            message: responseMessage,
+            isEmpty: filteredData.length === 0
         });
 
     } catch (error) {
