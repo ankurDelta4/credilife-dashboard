@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +25,11 @@ import {
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { ImageGallery } from "@/components/image-gallery"
+import { KYCDocumentItem } from "@/components/kyc-document-item"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { LoanApplicationDashboard } from "@/components/loan-application-dashboard"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface LoanApplication {
     id: string | number
@@ -85,22 +90,17 @@ export default function LoanApplicationDetailsPage({
 }: { 
     params: Promise<{ id: string }> 
 }) {
-    const [id, setId] = useState<string>("")
+    const resolvedParams = use(params)
+    const id = resolvedParams.id
     const [application, setApplication] = useState<LoanApplication | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [chatLink, setChatLink] = useState("")
+    const [isApproving, setIsApproving] = useState(false)
     const router = useRouter()
     const { toast } = useToast()
-
-    useEffect(() => {
-        const resolveParams = async () => {
-            const resolvedParams = await params
-            setId(resolvedParams.id)
-        }
-        resolveParams()
-    }, [params])
 
     useEffect(() => {
         if (id) {
@@ -172,7 +172,18 @@ export default function LoanApplicationDetailsPage({
     }
 
     const handleApprove = async () => {
+        if (!chatLink.trim()) {
+            toast({
+                variant: "destructive",
+                title: "Chat Link Required",
+                description: "Please enter the chat link for KYC verification"
+            })
+            return
+        }
+
+        setIsApproving(true)
         try {
+            // First approve the loan
             const response = await fetch(`/api/loans/${id}/approve`, {
                 method: 'PATCH',
                 headers: {
@@ -186,12 +197,48 @@ export default function LoanApplicationDetailsPage({
             const data = await response.json()
             
             if (data.success) {
-                setApplication(prev => prev ? { ...prev, status: "approved" as const } : null)
-                toast({
-                    variant: "success",
-                    title: "Success",
-                    description: "Loan application approved successfully"
+                // Get user data for email
+                let userName = "Customer"
+                let userEmail = ""
+                
+                if (userData) {
+                    userName = userData.first_name || userData.name || "Customer"
+                    userEmail = userData.email || ""
+                }
+
+                // Send pre-approval email with chat link
+                const emailResponse = await fetch('/api/notifications/pre-approval-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        applicationId: application?.id || id,
+                        userName,
+                        userEmail,
+                        chatLink: chatLink.trim()
+                    })
                 })
+
+                const emailData = await emailResponse.json()
+                
+                setApplication(prev => prev ? { ...prev, status: "approved" as const } : null)
+                
+                if (emailData.success) {
+                    toast({
+                        variant: "success",
+                        title: "Success",
+                        description: "Loan pre-approved and email sent successfully"
+                    })
+                } else {
+                    toast({
+                        variant: "success",
+                        title: "Partial Success",
+                        description: "Loan approved but email failed to send. Please contact customer manually."
+                    })
+                }
+                
+                setChatLink("") // Clear the chat link input
             } else {
                 toast({
                     variant: "destructive",
@@ -206,6 +253,8 @@ export default function LoanApplicationDetailsPage({
                 title: "Error",
                 description: "Failed to approve loan application"
             })
+        } finally {
+            setIsApproving(false)
         }
     }
 
@@ -305,11 +354,11 @@ export default function LoanApplicationDetailsPage({
                 <div className="space-y-4">
                     <Button 
                         variant="outline" 
-                        onClick={() => router.push('/loan-applications')}
+                        onClick={() => router.back()}
                         className="flex items-center gap-2"
                     >
                         <ArrowLeft className="h-4 w-4" />
-                        Back to Applications
+                        Back
                     </Button>
                     <div className="flex flex-col items-center justify-center py-8 space-y-4">
                         <AlertCircle className="h-12 w-12 text-red-500" />
@@ -330,11 +379,11 @@ export default function LoanApplicationDetailsPage({
                 <div className="space-y-4">
                     <Button 
                         variant="outline" 
-                        onClick={() => router.push('/loan-applications')}
+                        onClick={() => router.back()}
                         className="flex items-center gap-2"
                     >
                         <ArrowLeft className="h-4 w-4" />
-                        Back to Applications
+                        Back
                     </Button>
                     <div className="flex flex-col items-center justify-center py-8 space-y-4">
                         <AlertCircle className="h-12 w-12 text-gray-400" />
@@ -348,7 +397,7 @@ export default function LoanApplicationDetailsPage({
         )
     }
 
-    let userData = null
+    let userData: any = null
     if (application.user_data) {
         try {
             userData = JSON.parse(application.user_data)
@@ -509,18 +558,18 @@ export default function LoanApplicationDetailsPage({
                     <div className="flex items-center gap-4">
                         <Button 
                             variant="outline" 
-                            onClick={() => router.push('/loan-applications')}
+                            onClick={() => router.back()}
                             className="flex items-center gap-2"
                         >
                             <ArrowLeft className="h-4 w-4" />
-                            Back to Applications
+                            Back
                         </Button>
                         <div>
-                            <h1 className="text-3xl font-bold tracking-tight">
-                                Loan Application #{application.id}
+                            <h1 className="text-2xl font-bold">
+                                Loan Application Details
                             </h1>
-                            <p className="text-muted-foreground">
-                                Review loan application details
+                            <p className="text-muted-foreground text-sm">
+                                Application ID: #{application.id}
                             </p>
                         </div>
                     </div>
@@ -549,183 +598,201 @@ export default function LoanApplicationDetailsPage({
                     </div>
                 </div>
 
-                {/* Application Details */}
-                <div className="p-6 bg-blue-50 rounded-lg">
-                    <h3 className="font-semibold mb-4 text-blue-900">Application Details</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-                        <div>
-                            <span className="font-medium">Application ID:</span> {application.id}
-                        </div>
-                        <div>
-                            <span className="font-medium">Status:</span>
-                            <Badge className={`ml-2 ${
-                                application.status === "creating" ? "bg-blue-100 text-blue-800" :
-                                application.status === "pending" ? "bg-yellow-100 text-yellow-800" :
-                                application.status === "approved" ? "bg-green-100 text-green-800" :
-                                application.status === "rejected" ? "bg-red-100 text-red-800" :
-                                "bg-gray-100 text-gray-800"
-                            }`}>
-                                {application.status}
-                            </Badge>
-                        </div>
-                        <div>
-                            <span className="font-medium">Requested Amount:</span> ${application.requested_amount?.toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Submit Date:</span> {new Date(application.created_at).toLocaleDateString('en-US')}
-                        </div>
-                        <div>
-                            <span className="font-medium">Principal Amount:</span> ${(application.principal_amount || application.requested_amount)?.toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Interest Amount:</span> ${(application.interest_amount || 0)?.toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Closing Fees:</span> ${(application.closing_fees || 0)?.toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Total Repayment:</span> ${(application.total_repayment || 0)?.toLocaleString()}
-                        </div>
-                        <div>
-                            <span className="font-medium">Tenure:</span> {application.tenure || 'N/A'} {application.tenure ? 'months' : ''}
-                        </div>
-                        <div>
-                            <span className="font-medium">Repayment Type:</span> {application.repayment_type || 'N/A'}
-                        </div>
-                        <div>
-                            <span className="font-medium">Current Stage:</span> {application.current_stage || 'N/A'}
-                        </div>
-                        <div>
-                            <span className="font-medium">Loan Purpose:</span> {application.loan_purpose || 'N/A'}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Applicant Information */}
-                <div className="p-6 bg-gray-50 rounded-lg">
-                    <h3 className="font-semibold mb-4 text-gray-900">Applicant Information</h3>
-                    {userData ? (
-                        <div className="space-y-6">
-                            {/* Basic Information */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                {userDataFieldOrder
-                                    .filter(key => key in userData && !isDocumentField(key))
-                                    .map((key) => {
-                                        const value = userData[key]
-                                        return (
-                                            <div key={key} className="flex flex-col">
-                                                <span className="font-medium text-gray-600 mb-1">
-                                                    {formatFieldName(key)}:
-                                                </span>
-                                                <div className="overflow-hidden">
-                                                    {renderFieldValue(key, value)}
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                {Object.entries(userData)
-                                    .filter(([key]) => !userDataFieldOrder.includes(key) && !isDocumentField(key))
-                                    .map(([key, value]) => (
-                                        <div key={key} className="flex flex-col">
-                                            <span className="font-medium text-gray-600 mb-1">
-                                                {formatFieldName(key)}:
-                                            </span>
-                                            <div className="overflow-hidden">
-                                                {renderFieldValue(key, value)}
-                                            </div>
-                                        </div>
-                                    ))}
-                            </div>
-                            
-                            {/* Documents Section */}
-                            <div className="border-t pt-6">
-                                <h4 className="font-semibold mb-4 text-gray-900">Uploaded Documents</h4>
-                                <div className="space-y-6">
-                                    {[...userDataFieldOrder, ...Object.keys(userData)]
-                                        .filter((key, index, arr) => arr.indexOf(key) === index)
-                                        .filter(key => key in userData && isDocumentField(key))
-                                        .map((key) => (
-                                            <ImageGallery
-                                                key={key}
-                                                files={userData[key]}
-                                                label={formatFieldName(key)}
-                                                fieldName={key}
-                                                applicationId={application.id}
-                                            />
-                                        ))}
-                                    {[...userDataFieldOrder, ...Object.keys(userData)]
-                                        .filter((key, index, arr) => arr.indexOf(key) === index)
-                                        .filter(key => key in userData && isDocumentField(key)).length === 0 && (
-                                        <div className="text-sm text-gray-500 italic">
-                                            No documents uploaded
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            
-                            {/* KYC Documents Section with Verify Button */}
-                            <div className="border-t pt-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h4 className="font-semibold text-gray-900">KYC Documents</h4>
-                                    <Button
-                                        onClick={() => handleVerifyKYC()}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                                        size="sm"
-                                    >
-                                        <Check className="h-4 w-4 mr-2" />
-                                        Verify Manually
-                                    </Button>
-                                </div>
-                                <div className="text-sm text-gray-600 mb-3">
-                                    Review the following KYC documents before verification:
-                                </div>
-                                <div className="space-y-4">
-                                    {['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].map(docType => {
-                                        const docData = userData && userData[docType];
-                                        return docData ? (
-                                            <div key={docType} className="bg-gray-50 p-3 rounded">
-                                                <ImageGallery
-                                                    files={docData}
-                                                    label={`KYC: ${formatFieldName(docType)}`}
-                                                    fieldName={docType}
-                                                    applicationId={application.id}
-                                                />
-                                            </div>
-                                        ) : null;
-                                    })}
-                                    {userData && ['id_card', 'passport', 'driving_license', 'aadhar_card', 'pan_card', 'address_proof', 'bank_statement', 'salary_slip', 'income_certificate', 'utility_bill'].every(doc => !userData[doc]) && (
-                                        <div className="text-sm text-gray-500 italic">
-                                            No KYC documents uploaded
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="text-sm text-gray-500">
-                            No additional applicant information available.
-                        </div>
-                    )}
-                </div>
+                {/* Use the new Dashboard Component */}
+                <LoanApplicationDashboard 
+                    applicationId={application.id}
+                    applicationData={application}
+                />
 
                 {/* Action Buttons */}
-                {application.status !== "approved" && (
-                    <div className="flex gap-4 pt-4 border-t">
-                        <Button
-                            variant="destructive"
-                            onClick={handleReject}
-                            className="flex items-center gap-2"
-                        >
-                            <X className="h-4 w-4" />
-                            Reject Loan
-                        </Button>
-                        <Button
-                            onClick={handleApprove}
-                            className="flex items-center gap-2"
-                        >
-                            <Check className="h-4 w-4" />
-                            Approve Loan
-                        </Button>
+                {application.status !== "approved" && application.status !== "rejected" && (
+                    <div className="pt-4 border-t space-y-4">
+                        {/* Chat Link Input for KYC */}
+                        {(application.status === "pending" || application.status === "creating" || !application.status) && (
+                            <div className="bg-teal-50 p-4 rounded-lg">
+                                <Label htmlFor="chat-link" className="text-sm font-medium mb-2 block">
+                                    KYC Verification Chat Link (Required to Start Verification)
+                                </Label>
+                                <Input
+                                    id="chat-link"
+                                    type="url"
+                                    placeholder="https://example.com/chat/kyc-verification"
+                                    value={chatLink}
+                                    onChange={(e) => setChatLink(e.target.value)}
+                                    className="w-full"
+                                />
+                                <p className="text-xs text-gray-600 mt-2">
+                                    Enter the chat link that will be sent to the customer for KYC verification.
+                                </p>
+                            </div>
+                        )}
+                        
+                        {/* Action Buttons */}
+                        <div className="flex gap-4">
+                            <Button
+                                variant="destructive"
+                                onClick={handleReject}
+                                className="flex items-center gap-2"
+                            >
+                                <X className="h-4 w-4" />
+                                Reject Application
+                            </Button>
+                            
+                            {/* Show Start Verification for pending status */}
+                            {(application.status === "pending" || application.status === "creating" || !application.status) && (
+                                <Button
+                                    onClick={async () => {
+                                        if (!chatLink.trim()) {
+                                            toast({
+                                                variant: "destructive",
+                                                title: "Chat Link Required",
+                                                description: "Please enter the KYC verification chat link"
+                                            })
+                                            return
+                                        }
+                                        
+                                        setIsApproving(true)
+                                        try {
+                                            // Update status to under-verification
+                                            const statusResponse = await fetch(`/api/loan-applications/${id}/status`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ status: 'under-verification' })
+                                            })
+                                            
+                                            if (statusResponse.ok) {
+                                                // Send verification email
+                                                let userName = "Customer"
+                                                let userEmail = ""
+                                                
+                                                if (userData) {
+                                                    userName = userData.first_name || userData.name || "Customer"
+                                                    userEmail = userData.email || ""
+                                                }
+                                                
+                                                const emailResponse = await fetch('/api/notifications/pre-approval-email', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        applicationId: application.id,
+                                                        userName,
+                                                        userEmail,
+                                                        chatLink: chatLink.trim()
+                                                    })
+                                                })
+                                                
+                                                if (emailResponse.ok) {
+                                                    toast({
+                                                        variant: "success",
+                                                        title: "Verification Started",
+                                                        description: "KYC verification link has been sent to the customer"
+                                                    })
+                                                    setApplication(prev => prev ? { ...prev, status: "under-verification" as any } : null)
+                                                    setChatLink("")
+                                                } else {
+                                                    toast({
+                                                        variant: "destructive",
+                                                        title: "Email Failed",
+                                                        description: "Failed to send verification email. Please try again."
+                                                    })
+                                                }
+                                            }
+                                        } catch (error) {
+                                            toast({
+                                                variant: "destructive",
+                                                title: "Error",
+                                                description: "Failed to start verification process"
+                                            })
+                                        } finally {
+                                            setIsApproving(false)
+                                        }
+                                    }}
+                                    disabled={isApproving || !chatLink.trim()}
+                                    className="flex items-center gap-2 bg-[#0BA5AA] hover:bg-[#06888D] text-white"
+                                >
+                                    {isApproving ? (
+                                        <>
+                                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Starting Verification...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="h-4 w-4" />
+                                            Start Verification
+                                        </>
+                                    )}
+                                </Button>
+                            )}
+                            
+                            {/* Show Approve Loan for under-verification status */}
+                            {(application.status === "under-verification" || application.status === "under_verification" || 
+                              application.status === "verified" || application.status === "verification") && (
+                                <Button
+                                    onClick={async () => {
+                                        if (!confirm('Are you sure you want to approve this loan application?')) {
+                                            return
+                                        }
+                                        
+                                        setIsApproving(true)
+                                        try {
+                                            const response = await fetch(`/api/loan-applications/${id}/status`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ status: 'approved' })
+                                            })
+                                            
+                                            const data = await response.json()
+                                            
+                                            if (data.success) {
+                                                setApplication(prev => prev ? { ...prev, status: "approved" as const } : null)
+                                                toast({
+                                                    variant: "success",
+                                                    title: "Loan Approved",
+                                                    description: "The loan application has been approved successfully"
+                                                })
+                                            } else {
+                                                toast({
+                                                    variant: "destructive",
+                                                    title: "Error",
+                                                    description: data.error || "Failed to approve loan"
+                                                })
+                                            }
+                                        } catch (error) {
+                                            toast({
+                                                variant: "destructive",
+                                                title: "Error",
+                                                description: "Failed to approve loan application"
+                                            })
+                                        } finally {
+                                            setIsApproving(false)
+                                        }
+                                    }}
+                                    disabled={isApproving}
+                                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+                                >
+                                    {isApproving ? (
+                                        <>
+                                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Approving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="h-4 w-4" />
+                                            Approve Loan
+                                        </>
+                                    )}
+                                </Button>
+                            )}
+                        </div>
+                        
+                        {/* Status Message */}
+                        {(application.status === "under-verification" || application.status === "under_verification") && (
+                            <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                                <p className="text-sm text-teal-800">
+                                    <strong>Status:</strong> KYC verification is in progress. Once you're satisfied with the verification, click "Approve Loan" to finalize the approval.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 

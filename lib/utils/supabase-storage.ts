@@ -14,7 +14,10 @@ export async function uploadToSupabaseStorage(
   folder: string = 'images'
 ): Promise<UploadResult> {
   try {
-    const apiKey = process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY
+    // For client-side, use NEXT_PUBLIC_API_KEY
+    const apiKey = typeof window !== 'undefined' 
+      ? process.env.NEXT_PUBLIC_API_KEY 
+      : (process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY)
     
     if (!apiKey) {
       throw new Error('Supabase API key not found')

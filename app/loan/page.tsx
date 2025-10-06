@@ -4,14 +4,11 @@ import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { DataTable, Column } from "@/components/data-table"
 import { LoanDetailsModal } from "@/components/loan-details-modal"
-import { QuestionFlowModal } from "@/components/question-flow-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CustomerSearchInput } from "@/components/customer-search-input"
 import { useToast } from "@/components/ui/use-toast"
-import { calculateInstallments } from "@/lib/utils/loan-calculations"
 import { bulkExport } from "@/lib/utils/export-utils"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
@@ -58,22 +55,17 @@ export default function LoanPage() {
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false)
-  const [isQuestionFlowOpen, setIsQuestionFlowOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [basicLoanData, setBasicLoanData] = useState({
-    user_id: '',
-    user_name: '',
-    requested_amount: '',
-    tenure: '',
-    repayment_type: 'monthly',
-    interest_amount: 0,
-    principal_amount: 0,
-    closing_fees: 0,
-    total_repayment: 0,
+  const [loanFormData, setLoanFormData] = useState({
+    full_name: '',
     id_number: '',
-    questions_count: 0,
-    is_renewal: false
+    loan_amount: '',
+    installment_amount: '',
+    number_of_installments: '',
+    installment_due_date: '',
+    email: '',
+    whatsapp: ''
   })
   const { toast } = useToast()
   const itemsPerPage = 10
@@ -135,91 +127,76 @@ export default function LoanPage() {
 
 
   const handleNewLoan = () => {
-    setBasicLoanData({
-      user_id: '',
-      user_name: '',
-      requested_amount: '',
-      tenure: '',
-      repayment_type: 'monthly',
-      interest_amount: 0,
-      principal_amount: 0,
-      closing_fees: 0,
-      total_repayment: 0,
+    setLoanFormData({
+      full_name: '',
       id_number: '',
-      questions_count: 0,
-      is_renewal: false
+      loan_amount: '',
+      installment_amount: '',
+      number_of_installments: '',
+      installment_due_date: '',
+      email: '',
+      whatsapp: ''
     })
     setIsNewLoanModalOpen(true)
   }
 
-  const handleBasicDataSubmit = () => {
-    // Validate basic loan data
-    if (!basicLoanData.user_id || !basicLoanData.requested_amount || !basicLoanData.tenure) {
+  const handleLoanSubmit = async () => {
+    // Validate loan data
+    const { full_name, id_number, loan_amount, installment_amount, number_of_installments, installment_due_date, email, whatsapp } = loanFormData
+    
+    if (!full_name || !id_number || !loan_amount || !installment_amount || !number_of_installments || !installment_due_date || !email || !whatsapp) {
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Please fill in all required fields: Customer, Requested Amount, and Tenure"
+        description: "Please fill in all required fields"
       })
       return
     }
-
-    // Validate amount range
-    const amount = parseFloat(basicLoanData.requested_amount)
-    if (amount < 2500 || amount > 30000) {
-      toast({
-        variant: "destructive",
-        title: "Invalid Amount",
-        description: "Requested amount must be between $2,500 and $30,000"
-      })
-      return
-    }
-
+    
+    setIsCreating(true)
+    
     try {
-      // Calculate loan details
-      const calculation = calculateInstallments(
-        amount,
-        parseFloat(basicLoanData.tenure),
-        basicLoanData.repayment_type
-      )
-
-      // Update basic loan data with calculations
-      const updatedLoanData = {
-        ...basicLoanData,
-        principal_amount: calculation.principal,
-        interest_amount: calculation.totalInterest,
-        closing_fees: calculation.closingFee,
-        total_repayment: calculation.totalRepayment
+      // Create loan application
+      const response = await fetch('/api/loan-applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...loanFormData,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast({
+          variant: "success",
+          title: "Success!",
+          description: "Loan application has been created successfully."
+        })
+        
+        setIsNewLoanModalOpen(false)
+        fetchLoans()
+      } else {
+        throw new Error(data.error || 'Failed to create loan')
       }
-      
-      setBasicLoanData(updatedLoanData)
-      
-      // Close basic form and open question flow
-      setIsNewLoanModalOpen(false)
-      setIsQuestionFlowOpen(true)
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Calculation Error",
-        description: "Failed to calculate loan details. Please check your input."
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create loan"
       })
+    } finally {
+      setIsCreating(false)
     }
   }
 
-  const handleQuestionFlowSubmit = (questionFlowData: any) => {
-    // This function is now handled in QuestionFlowModal
-    // Just close the modal and refresh the loans
-    setIsQuestionFlowOpen(false)
-    fetchLoans()
-    
-    toast({
-      variant: "success",
-      title: "Success!",
-      description: "Loan application has been submitted successfully."
-    })
-  }
 
-  const handleFormChange = (field: string, value: string | boolean) => {
-    setBasicLoanData(prev => ({ ...prev, [field]: value }))
+  const handleFormChange = (field: string, value: string) => {
+    setLoanFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleExportLoans = async () => {
@@ -440,65 +417,117 @@ export default function LoanPage() {
           loan={selectedLoan}
         />
 
-        {/* Basic Loan Data Modal */}
+        {/* New Loan Modal */}
         <Dialog open={isNewLoanModalOpen} onOpenChange={setIsNewLoanModalOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>New Loan Application - Basic Details</DialogTitle>
+              <DialogTitle>New Loan Registration</DialogTitle>
               <DialogDescription>
-                Enter basic loan information, then we'll guide you through customer questions
+                Register a new loan for an existing client
               </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-4 py-4">
-              <CustomerSearchInput
-                value={basicLoanData.user_id}
-                onChange={(userId, userName) => {
-                  handleFormChange('user_id', userId)
-                  handleFormChange('user_name', userName)
-                }}
-                label="Select Customer"
-                required
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="full_name">Full Name *</Label>
+                  <Input
+                    id="full_name"
+                    type="text"
+                    placeholder="John Doe"
+                    value={loanFormData.full_name}
+                    onChange={(e) => handleFormChange('full_name', e.target.value)}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="requested_amount">Requested Amount * (Min: $2,500 - Max: $30,000)</Label>
-                <Input
-                  id="requested_amount"
-                  type="number"
-                  min="2500"
-                  max="30000"
-                  placeholder="2500"
-                  value={basicLoanData.requested_amount}
-                  onChange={(e) => handleFormChange('requested_amount', e.target.value)}
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="id_number">ID Number (11 digits) *</Label>
+                  <Input
+                    id="id_number"
+                    type="text"
+                    placeholder="12345678901"
+                    maxLength={11}
+                    value={loanFormData.id_number}
+                    onChange={(e) => handleFormChange('id_number', e.target.value)}
+                  />
+                </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="loan_amount">Loan Amount *</Label>
+                  <Input
+                    id="loan_amount"
+                    type="number"
+                    placeholder="5000"
+                    value={loanFormData.loan_amount}
+                    onChange={(e) => handleFormChange('loan_amount', e.target.value)}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="tenure">Tenure *</Label>
-                <Select value={basicLoanData.tenure} onValueChange={(value) => handleFormChange('tenure', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select tenure" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3">3 months</SelectItem>
-                    <SelectItem value="6">6 months</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Label htmlFor="installment_amount">Installment Amount *</Label>
+                  <Input
+                    id="installment_amount"
+                    type="number"
+                    placeholder="1000"
+                    value={loanFormData.installment_amount}
+                    onChange={(e) => handleFormChange('installment_amount', e.target.value)}
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="repayment_type">Repayment Type</Label>
-                <Select value={basicLoanData.repayment_type} onValueChange={(value) => handleFormChange('repayment_type', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select repayment type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="bi-weekly">Bi-weekly</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="number_of_installments">Number of Installments *</Label>
+                  <Input
+                    id="number_of_installments"
+                    type="number"
+                    placeholder="6"
+                    value={loanFormData.number_of_installments}
+                    onChange={(e) => handleFormChange('number_of_installments', e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="installment_due_date">First Installment Due Date *</Label>
+                  <Input
+                    id="installment_due_date"
+                    type="date"
+                    value={loanFormData.installment_due_date}
+                    onChange={(e) => handleFormChange('installment_due_date', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Address *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="john@example.com"
+                    value={loanFormData.email}
+                    onChange={(e) => handleFormChange('email', e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="whatsapp">WhatsApp Number *</Label>
+                  <Input
+                    id="whatsapp"
+                    type="tel"
+                    placeholder="+1234567890"
+                    value={loanFormData.whatsapp}
+                    onChange={(e) => handleFormChange('whatsapp', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> Email and WhatsApp will be used for sending payment reminders 7 and 3 days before the due date.
+                </p>
               </div>
             </div>
 
@@ -510,33 +539,15 @@ export default function LoanPage() {
                 Cancel
               </Button>
               <Button 
-                onClick={handleBasicDataSubmit}
+                onClick={handleLoanSubmit}
+                disabled={isCreating}
               >
-                Continue to Questions
+                {isCreating ? 'Creating...' : 'Create Loan'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Question Flow Modal */}
-        <QuestionFlowModal
-          isOpen={isQuestionFlowOpen}
-          onClose={() => setIsQuestionFlowOpen(false)}
-          onSubmit={handleQuestionFlowSubmit}
-          isLoading={isCreating}
-          initialLoanData={basicLoanData}
-          onSuccess={() => {
-            setIsQuestionFlowOpen(false)
-            fetchLoans()
-          }}
-          onError={(error) => {
-            toast({
-              variant: "destructive",
-              title: "Submission Failed",
-              description: error || "Failed to create loan application"
-            })
-          }}
-        />
 
       </div>
     </DashboardLayout>

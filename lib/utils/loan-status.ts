@@ -3,7 +3,7 @@
  * Handles the progression of loans through different statuses
  */
 
-export type LoanStatus = 'created' | 'pending' | 'verification' | 'approved' | 'declined';
+export type LoanStatus = 'created' | 'pending' | 'verification' | 'verified' | 'approved' | 'declined';
 
 export interface StatusTransition {
   from: LoanStatus;
@@ -39,7 +39,7 @@ export const LOAN_STATUS_WORKFLOW: Record<LoanStatus, LoanStatusInfo> = {
     description: 'Loan application submitted and awaiting initial review',
     color: 'text-yellow-700',
     bgColor: 'bg-yellow-100',
-    nextStatuses: ['verification', 'declined'],
+    nextStatuses: ['verification', 'verified', 'approved', 'declined'],
     icon: '⏳'
   },
   verification: {
@@ -48,8 +48,17 @@ export const LOAN_STATUS_WORKFLOW: Record<LoanStatus, LoanStatusInfo> = {
     description: 'Application is being verified and documents are being reviewed',
     color: 'text-blue-700',
     bgColor: 'bg-blue-100',
-    nextStatuses: ['approved', 'declined'],
+    nextStatuses: ['verified', 'approved', 'declined'],
     icon: '🔍'
+  },
+  verified: {
+    status: 'verified',
+    label: 'Verified',
+    description: 'Documents have been verified successfully',
+    color: 'text-indigo-700',
+    bgColor: 'bg-indigo-100',
+    nextStatuses: ['approved', 'declined'],
+    icon: '✔️'
   },
   approved: {
     status: 'approved',
@@ -76,6 +85,9 @@ export const LOAN_STATUS_WORKFLOW: Record<LoanStatus, LoanStatusInfo> = {
  */
 export function isValidStatusTransition(from: LoanStatus, to: LoanStatus): boolean {
   const fromStatus = LOAN_STATUS_WORKFLOW[from];
+  if (!fromStatus) {
+    return false;
+  }
   return fromStatus.nextStatuses.includes(to);
 }
 
@@ -137,7 +149,7 @@ export function transitionLoanStatus(
  * Get the complete workflow path
  */
 export function getWorkflowPath(): LoanStatus[] {
-  return ['created', 'pending', 'verification', 'approved'];
+  return ['created', 'pending', 'verification', 'verified', 'approved'];
 }
 
 /**

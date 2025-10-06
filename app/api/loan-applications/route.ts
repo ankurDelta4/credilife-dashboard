@@ -3,47 +3,146 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { 
-            user_id,
-            requested_amount,
-            loan_purpose,
-            status = 'pending',
-            current_stage = 'application_submitted',
-            is_renewal = false,
-            interest_amount = 0,
-            principal_amount,
-            closing_fees = 0,
-            total_repayment,
-            user_data,
-            tenure,
-            repayment_type = 'monthly',
-            id_number,
-            questions_count = 0
-        } = body;
-
-        // Validation
-        console.log('Received loan application data:', body);
-        if (!user_id || !requested_amount || !tenure || !user_data) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: 'Required fields: user_id, requested_amount, tenure, user_data',
-                    code: 'MISSING_FIELDS'
-                },
-                { status: 400 }
-            );
-        }
-
-        // Validate user_data structure
-        if (!user_data.first_name || !user_data.last_name || !user_data.whatsapp_number || !user_data.email) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: 'User data must include: first_name, last_name, phone, email',
-                    code: 'MISSING_USER_DATA'
-                },
-                { status: 400 }
-            );
+        
+        // Check if it's the simplified format
+        const isSimplifiedFormat = 'full_name' in body && 'loan_amount' in body;
+        
+        let loanApplicationData: any;
+        
+        if (isSimplifiedFormat) {
+            // New simplified format from loan management page
+            const { 
+                full_name,
+                id_number,
+                loan_amount,
+                installment_amount,
+                number_of_installments,
+                installment_due_date,
+                email,
+                whatsapp,
+                status = 'pending',
+                created_at
+            } = body;
+            
+            // Validation for simplified format
+            if (!full_name || !id_number || !loan_amount || !installment_amount || 
+                !number_of_installments || !installment_due_date || !email || !whatsapp) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'All fields are required',
+                        code: 'MISSING_FIELDS',
+                        received: Object.keys(body)
+                    },
+                    { status: 400 }
+                );
+            }
+            
+            // Parse full name
+            const nameParts = full_name.split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+            
+            // Build user_data object with all information
+            const userData = {
+                first_name: firstName,
+                last_name: lastName,
+                full_name: full_name,
+                id_number: id_number,
+                email: email,
+                whatsapp_number: whatsapp,
+                phone: whatsapp,
+                loan_amount: loan_amount,
+                installment_amount: installment_amount,
+                number_of_installments: number_of_installments,
+                installment_due_date: installment_due_date
+            };
+            
+            // Prepare data for loan_applications table
+            loanApplicationData = {
+                user_id: id_number, // Using ID number as user_id
+                requested_amount: parseFloat(loan_amount),
+                loan_purpose: 'Personal Loan',
+                status: status,
+                current_stage: 'application_submitted',
+                is_renewal: false,
+                interest_amount: 0,
+                principal_amount: parseFloat(loan_amount),
+                closing_fees: 0,
+                total_repayment: parseFloat(installment_amount) * parseInt(number_of_installments),
+                user_data: JSON.stringify(userData),
+                tenure: parseInt(number_of_installments),
+                repayment_type: 'monthly',
+                id_number: parseInt(id_number),
+                questions_count: 0,
+                created_at: created_at || new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+            
+        } else {
+            // Original format (for backward compatibility)
+            const { 
+                user_id,
+                requested_amount,
+                loan_purpose,
+                status = 'pending',
+                current_stage = 'application_submitted',
+                is_renewal = false,
+                interest_amount = 0,
+                principal_amount,
+                closing_fees = 0,
+                total_repayment,
+                user_data,
+                tenure,
+                repayment_type = 'monthly',
+                id_number,
+                questions_count = 0
+            } = body;
+            
+            // Validation for original format
+            console.log('Received loan application data:', body);
+            if (!user_id || !requested_amount || !tenure || !user_data) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'Required fields: user_id, requested_amount, tenure, user_data',
+                        code: 'MISSING_FIELDS'
+                    },
+                    { status: 400 }
+                );
+            }
+            
+            // Validate user_data structure
+            if (!user_data.first_name || !user_data.last_name || !user_data.whatsapp_number || !user_data.email) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'User data must include: first_name, last_name, phone, email',
+                        code: 'MISSING_USER_DATA'
+                    },
+                    { status: 400 }
+                );
+            }
+            
+            loanApplicationData = {
+                user_id,
+                requested_amount: parseFloat(requested_amount),
+                loan_purpose,
+                status,
+                current_stage,
+                is_renewal,
+                interest_amount: parseFloat(interest_amount),
+                principal_amount: parseFloat(principal_amount) || parseFloat(requested_amount),
+                closing_fees: parseFloat(closing_fees),
+                total_repayment: parseFloat(total_repayment) || parseFloat(requested_amount),
+                user_data: JSON.stringify(user_data),
+                tenure: parseInt(tenure),
+                repayment_type,
+                id_number: id_number ? parseInt(id_number) : null,
+                questions_count: 30,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
         }
 
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
@@ -52,26 +151,6 @@ export async function POST(request: NextRequest) {
             'apikey': `${process.env.API_KEY || ''}`,
             'Authorization': `Bearer ${process.env.API_KEY || ''}`,
             'Prefer': 'return=representation'
-        };
-
-        const loanApplicationData = {
-            user_id,
-            requested_amount: parseFloat(requested_amount),
-            loan_purpose,
-            status,
-            current_stage,
-            is_renewal,
-            interest_amount: parseFloat(interest_amount),
-            principal_amount: parseFloat(principal_amount) || parseFloat(requested_amount),
-            closing_fees: parseFloat(closing_fees),
-            total_repayment: parseFloat(total_repayment) || parseFloat(requested_amount),
-            user_data: JSON.stringify(user_data),
-            tenure: parseInt(tenure),
-            repayment_type,
-            id_number: id_number ? parseInt(id_number) : null,
-            questions_count: 30,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
         };
 
         console.log('Creating loan application with data:', loanApplicationData);

@@ -235,62 +235,113 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { userId, amount, purpose, termMonths } = body;
-
-        // Validation
-        if (!userId || !amount || !purpose || !termMonths) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: 'All fields are required',
-                    code: 'MISSING_FIELDS'
-                },
-                { status: 400 }
-            );
+        
+        // Handle both old and new formats
+        const isNewFormat = 'full_name' in body;
+        
+        if (isNewFormat) {
+            // New simplified format
+            const { full_name, id_number, loan_amount, installment_amount, number_of_installments, installment_due_date, email, whatsapp } = body;
+            
+            // Validation for new format
+            if (!full_name || !id_number || !loan_amount || !installment_amount || !number_of_installments || !installment_due_date || !email || !whatsapp) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'All fields are required',
+                        code: 'MISSING_FIELDS',
+                        received: Object.keys(body)
+                    },
+                    { status: 400 }
+                );
+            }
+            
+            // Create new loan with simplified data
+            const newLoan = {
+                id: Math.max(...loans.map(l => l.id), 0) + 1,
+                userId: id_number, // Using ID number as userId for now
+                amount: parseFloat(loan_amount),
+                purpose: 'Personal Loan',
+                status: body.status || 'active',
+                interestRate: ((parseFloat(loan_amount) - (parseFloat(installment_amount) * parseInt(number_of_installments))) / parseFloat(loan_amount)) * 100,
+                termMonths: parseInt(number_of_installments),
+                monthlyPayment: parseFloat(installment_amount),
+                createdAt: body.created_at || new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                // Store additional data
+                customerName: full_name,
+                customerEmail: email,
+                customerPhone: whatsapp,
+                firstDueDate: installment_due_date,
+                idNumber: id_number
+            };
+            
+            loans.push(newLoan);
+            
+            return NextResponse.json({
+                success: true,
+                data: { loan: newLoan }
+            });
+            
+        } else {
+            // Old format (backward compatibility)
+            const { userId, amount, purpose, termMonths } = body;
+            
+            // Validation for old format
+            if (!userId || !amount || !purpose || !termMonths) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'All fields are required',
+                        code: 'MISSING_FIELDS'
+                    },
+                    { status: 400 }
+                );
+            }
+            
+            if (amount <= 0 || termMonths <= 0) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'Amount and term must be positive numbers',
+                        code: 'INVALID_VALUES'
+                    },
+                    { status: 400 }
+                );
+            }
+            
+            // Calculate interest rate based on amount and term (simplified logic)
+            let interestRate = 3.5; // Base rate
+            if (amount > 100000) interestRate += 0.5;
+            if (termMonths > 180) interestRate += 0.3;
+            
+            // Calculate monthly payment
+            const monthlyRate = interestRate / 100 / 12;
+            const monthlyPayment = amount * (monthlyRate * Math.pow(1 + monthlyRate, termMonths)) /
+                (Math.pow(1 + monthlyRate, termMonths) - 1);
+            
+            // Create new loan
+            const newLoan = {
+                id: Math.max(...loans.map(l => l.id), 0) + 1,
+                userId: parseInt(userId),
+                amount: parseFloat(amount),
+                purpose,
+                status: 'pending',
+                interestRate,
+                termMonths: parseInt(termMonths),
+                monthlyPayment: Math.round(monthlyPayment * 100) / 100,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            loans.push(newLoan);
+            
+            return NextResponse.json({
+                success: true,
+                data: { loan: newLoan },
+                message: 'Loan application submitted successfully'
+            }, { status: 201 });
         }
-
-        if (amount <= 0 || termMonths <= 0) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: 'Amount and term must be positive numbers',
-                    code: 'INVALID_VALUES'
-                },
-                { status: 400 }
-            );
-        }
-
-        // Calculate interest rate based on amount and term (simplified logic)
-        let interestRate = 3.5; // Base rate
-        if (amount > 100000) interestRate += 0.5;
-        if (termMonths > 180) interestRate += 0.3;
-
-        // Calculate monthly payment
-        const monthlyRate = interestRate / 100 / 12;
-        const monthlyPayment = amount * (monthlyRate * Math.pow(1 + monthlyRate, termMonths)) /
-            (Math.pow(1 + monthlyRate, termMonths) - 1);
-
-        // Create new loan
-        const newLoan = {
-            id: Math.max(...loans.map(l => l.id)) + 1,
-            userId: parseInt(userId),
-            amount: parseFloat(amount),
-            purpose,
-            status: 'pending',
-            interestRate,
-            termMonths: parseInt(termMonths),
-            monthlyPayment: Math.round(monthlyPayment * 100) / 100,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-
-        loans.push(newLoan);
-
-        return NextResponse.json({
-            success: true,
-            data: { loan: newLoan },
-            message: 'Loan application submitted successfully'
-        }, { status: 201 });
 
     } catch (error) {
         return NextResponse.json(
