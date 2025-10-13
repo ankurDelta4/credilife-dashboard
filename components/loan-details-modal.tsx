@@ -232,7 +232,10 @@ export function LoanDetailsModal({
                 setShowTerminateDialog(false)
                 // Refresh loan details
                 await fetchLoanDetails()
-                alert('Loan terminated successfully!')
+                const message = data.data?.installmentsDeleted !== false 
+                    ? 'Loan terminated successfully and all installments have been deleted!'
+                    : 'Loan terminated successfully!'
+                alert(message)
             } else {
                 alert(data.error || 'Failed to terminate loan')
             }

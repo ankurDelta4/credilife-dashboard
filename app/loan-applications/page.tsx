@@ -275,7 +275,7 @@ function LoanApplicationModal({
                                 <Badge className={`ml-2 ${
                                     application.status === "creating" ? "bg-blue-100 text-blue-800" :
                                     application.status === "pending" ? "bg-yellow-100 text-yellow-800" :
-                                    application.status === "verification" ? "bg-purple-100 text-purple-800" :
+                                    application.status === "verification" || application.status === "under-verification" ? "bg-purple-100 text-purple-800" :
                                     application.status === "approved" ? "bg-green-100 text-green-800" :
                                     application.status === "rejected" ? "bg-red-100 text-red-800" :
                                     "bg-gray-100 text-gray-800"
@@ -648,13 +648,15 @@ function LoanApplicationsTable({
         const statusColors = {
             creating: "bg-blue-100 text-blue-800",
             pending: "bg-yellow-100 text-yellow-800",
-            verification: "bg-purple-100 text-purple-800",
+            "under-verification": "bg-purple-100 text-purple-800",
+            verification: "bg-purple-100 text-purple-800", // Support both variations
             approved: "bg-green-100 text-green-800",
             rejected: "bg-red-100 text-red-800",
         }
+        const displayStatus = status === "under-verification" ? "Under Verification" : status.charAt(0).toUpperCase() + status.slice(1)
         return (
             <Badge className={statusColors[status as keyof typeof statusColors] || "bg-gray-100 text-gray-800"}>
-                {status}
+                {displayStatus}
             </Badge>
         )
     }
@@ -781,7 +783,16 @@ export default function LoanApplicationsPage() {
         const matchesSearch = application.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             application.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
             application.id.toString().toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesStatus = statusFilter === "all" || application.status === statusFilter
+        
+        // Handle status filter - map "under-verification" to match filter value
+        let matchesStatus = false
+        if (statusFilter === "all") {
+            matchesStatus = true
+        } else if (statusFilter === "under-verification") {
+            matchesStatus = application.status === "under-verification" || application.status === "verification"
+        } else {
+            matchesStatus = application.status === statusFilter
+        }
 
         return matchesSearch && matchesStatus
     })
@@ -877,8 +888,28 @@ export default function LoanApplicationsPage() {
                     )
                 )
                 console.log("Loan application approved:", applicationId)
+                
+                // Show success toast with loan creation info
+                if (data.data?.loanId) {
+                    toast({
+                        variant: "success",
+                        title: "Application Approved",
+                        description: `Loan application approved and loan created successfully. Loan ID: ${data.data.loanId}`
+                    })
+                } else {
+                    toast({
+                        variant: "success",
+                        title: "Application Approved",
+                        description: "Loan application has been approved successfully"
+                    })
+                }
             } else {
                 console.error("Failed to approve loan application:", data.error)
+                toast({
+                    variant: "destructive",
+                    title: "Approval Failed",
+                    description: data.error || "Failed to approve loan application"
+                })
             }
         } catch (error) {
             console.error("Error approving loan application:", error)
@@ -1021,6 +1052,7 @@ export default function LoanApplicationsPage() {
             all: applications.length,
             creating: applications.filter(app => app.status === "creating").length,
             pending: applications.filter(app => app.status === "pending").length,
+            "under-verification": applications.filter(app => app.status === "under-verification" || app.status === "verification").length,
             approved: applications.filter(app => app.status === "approved").length,
             rejected: applications.filter(app => app.status === "rejected").length,
         }
@@ -1055,6 +1087,7 @@ export default function LoanApplicationsPage() {
                             all: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
                             creating: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
                             pending: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
+                            "under-verification": isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
                             approved: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
                             rejected: isActive ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200",
                         }
@@ -1066,7 +1099,9 @@ export default function LoanApplicationsPage() {
                                     statusStyles[status as keyof typeof statusStyles]
                                 }`}
                             >
-                                {status === "all" ? "All" : status.charAt(0).toUpperCase() + status.slice(1)} ({count})
+                                {status === "all" ? "All" : 
+                                 status === "under-verification" ? "Under Verification" :
+                                 status.charAt(0).toUpperCase() + status.slice(1)} ({count})
                             </button>
                         )
                     })}
@@ -1091,7 +1126,7 @@ export default function LoanApplicationsPage() {
                             <SelectItem value="all">All Status</SelectItem>
                             <SelectItem value="creating">Creating</SelectItem>
                             <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="verification">Under Verification</SelectItem>
+                            <SelectItem value="under-verification">Under Verification</SelectItem>
                             <SelectItem value="approved">Approved</SelectItem>
                             <SelectItem value="rejected">Rejected</SelectItem>
                         </SelectContent>

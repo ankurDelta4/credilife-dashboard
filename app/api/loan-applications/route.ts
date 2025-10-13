@@ -113,16 +113,17 @@ export async function POST(request: NextRequest) {
             }
             
             // Validate user_data structure
-            if (!user_data.first_name || !user_data.last_name || !user_data.whatsapp_number || !user_data.email) {
-                return NextResponse.json(
-                    {
-                        success: false,
-                        error: 'User data must include: first_name, last_name, phone, email',
-                        code: 'MISSING_USER_DATA'
-                    },
-                    { status: 400 }
-                );
-            }
+            // console.log('User data:', user_data);
+            // if (!user_data.whatsapp_number || !user_data.email) {
+            //     return NextResponse.json(
+            //         {
+            //             success: false,
+            //             error: 'User data must include: whatsapp_number, email',
+            //             code: 'MISSING_USER_DATA'
+            //         },
+            //         { status: 400 }
+            //     );
+            // }
             
             loanApplicationData = {
                 user_id,

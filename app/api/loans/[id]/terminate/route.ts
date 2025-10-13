@@ -22,7 +22,30 @@ export async function POST(
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
         
         try {
-            console.log(`Terminating loan ${id}`);
+            console.log(`[TERMINATE] Starting termination process for loan ${id}`);
+            
+            // Step 1: Delete all installments associated with this loan
+            console.log(`[TERMINATE] Deleting installments for loan ${id}`);
+            
+            const deleteInstallmentsResponse = await fetch(`${backendUrl}/installments?loan_id=eq.${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': `${process.env.API_KEY || ''}`,
+                    'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                }
+            });
+            
+            if (deleteInstallmentsResponse.ok || deleteInstallmentsResponse.status === 204) {
+                console.log(`[TERMINATE] Successfully deleted installments for loan ${id}`);
+            } else {
+                const installmentError = await deleteInstallmentsResponse.text();
+                console.log(`[TERMINATE] Warning: Failed to delete installments:`, installmentError);
+                // Continue with loan termination even if installment deletion fails
+            }
+            
+            // Step 2: Update loan status to terminated
+            console.log(`[TERMINATE] Updating loan status to terminated`);
             
             const backendResponse = await fetch(`${backendUrl}/loans?id=eq.${id}`, {
                 method: 'PATCH',
@@ -38,27 +61,53 @@ export async function POST(
                 })
             });
 
-            console.log(`Backend response status: ${backendResponse.status}`);
+            console.log(`[TERMINATE] Loan update response status: ${backendResponse.status}`);
             
-            if (backendResponse.ok) {
-                console.log('Loan terminated successfully in backend');
+            if (backendResponse.ok || backendResponse.status === 204) {
+                console.log(`[TERMINATE] ✓ Loan ${id} terminated successfully`);
+                
+                // Step 3: Verify installments were deleted (optional check)
+                const checkInstallmentsResponse = await fetch(`${backendUrl}/installments?loan_id=eq.${id}&select=count`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': `${process.env.API_KEY || ''}`,
+                        'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                        'Prefer': 'count=exact'
+                    }
+                });
+                
+                let remainingInstallments = 'unknown';
+                if (checkInstallmentsResponse.ok) {
+                    const countHeader = checkInstallmentsResponse.headers.get('content-range');
+                    if (countHeader) {
+                        const match = countHeader.match(/\*\/(\d+)/);
+                        if (match) {
+                            remainingInstallments = match[1];
+                        }
+                    }
+                    console.log(`[TERMINATE] Remaining installments after deletion: ${remainingInstallments}`);
+                }
+                
                 return NextResponse.json({
                     success: true,
-                    message: 'Loan terminated successfully',
+                    message: 'Loan terminated successfully and all installments deleted',
                     data: {
                         loanId: id,
                         status: 'terminated',
-                        terminationDate: new Date().toISOString()
+                        terminationDate: new Date().toISOString(),
+                        installmentsDeleted: remainingInstallments === '0' || remainingInstallments === 'unknown'
                     }
                 });
             } else {
                 const errorData = await backendResponse.text();
-                console.log('Backend error response:', errorData);
+                console.log('[TERMINATE] ✗ Loan termination failed:', errorData);
                 return NextResponse.json(
                     {
                         success: false,
                         error: 'Failed to terminate loan in backend',
-                        code: 'BACKEND_ERROR'
+                        code: 'BACKEND_ERROR',
+                        details: errorData
                     },
                     { status: 500 }
                 );

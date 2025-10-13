@@ -24,7 +24,10 @@ export async function PATCH(
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
         
         try {
-            console.log(`Approving loan application ${applicationId}`);
+            console.log(`[APPROVE] ===== Starting approval process =====`);
+        console.log(`[APPROVE] Application ID: ${applicationId}`);
+        console.log(`[APPROVE] Backend URL: ${backendUrl}`);
+        console.log(`[APPROVE] API Key present: ${!!process.env.API_KEY}`);
             
             // First, get the application details to create the loan
             const applicationResponse = await fetch(`${backendUrl}/loan_applications?id=eq.${applicationId}&select=*,users(*)`, {
@@ -36,25 +39,88 @@ export async function PATCH(
                 },
             });
 
+            console.log(`[APPROVE] Fetch application response status: ${applicationResponse.status}`);
+            
             if (applicationResponse.ok) {
                 const applicationData = await applicationResponse.json();
-                console.log('Application data:', applicationData);
+                console.log('[APPROVE] Application data received:', JSON.stringify(applicationData, null, 2));
                 
                 if (applicationData && applicationData.length > 0) {
                     const application = applicationData[0];
                     
                     // Validate current status - should be in verification stage before approval
-                    const currentStatus = application.status as LoanStatus;
-                    console.log(`Current application status: ${currentStatus}`);
+                    // Map "under-verification" to "verification" to match the LoanStatus type
+                    let currentStatus = application.status;
+                    if (currentStatus === 'under-verification') {
+                        currentStatus = 'verification';
+                    }
                     
-                    // Check if we can transition to approved
-                    const statusTransition = transitionLoanStatus(currentStatus, 'approved');
-                    if (!statusTransition.success) {
-                        return NextResponse.json({
-                            success: false,
-                            error: `Cannot approve loan from current status '${currentStatus}'. ${statusTransition.error}`,
-                            code: 'INVALID_STATUS_TRANSITION'
-                        }, { status: 400 });
+                    console.log(`[APPROVE] Current application status: ${application.status} (mapped to: ${currentStatus})`);
+                    console.log(`[APPROVE] Application details:`, {
+                        id: application.id,
+                        user_id: application.user_id,
+                        requested_amount: application.requested_amount,
+                        principal_amount: application.principal_amount,
+                        interest_amount: application.interest_amount,
+                        tenure: application.tenure,
+                        repayment_type: application.repayment_type
+                    });
+                    
+                    // Skip status validation if already approved (to handle re-runs)
+                    if (application.status === 'approved') {
+                        console.log('[APPROVE] Application already approved, checking if loan exists...');
+                        
+                        // Check if loan already exists for this application
+                        const checkLoanResponse = await fetch(`${backendUrl}/loans?user_id=eq.${application.user_id}&select=*`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'apikey': `${process.env.API_KEY || ''}`,
+                                'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                            },
+                        });
+                        
+                        if (checkLoanResponse.ok) {
+                            const existingLoans = await checkLoanResponse.json();
+                            if (existingLoans && existingLoans.length > 0) {
+                                // Check if any loan was created recently (within last hour) with same amounts
+                                const recentLoan = existingLoans.find((loan: any) => {
+                                    const loanCreatedAt = new Date(loan.created_at);
+                                    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                                    return loanCreatedAt > hourAgo && 
+                                           loan.principal_amount === application.principal_amount;
+                                });
+                                
+                                if (recentLoan) {
+                                    console.log(`[APPROVE] Loan already exists for this approved application: ${recentLoan.id}`);
+                                    return NextResponse.json({
+                                        success: true,
+                                        message: 'Application already approved and loan exists',
+                                        data: {
+                                            applicationId: applicationId,
+                                            loanId: recentLoan.id
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        
+                        console.log('[APPROVE] No existing loan found for approved application, will create one');
+                        // Continue to create loan if not found
+                    } else {
+                        // Check if we can transition to approved
+                        const statusTransition = transitionLoanStatus(currentStatus as LoanStatus, 'approved');
+                        if (!statusTransition.success) {
+                            // Allow transition from pending, under-verification, verification, or verified
+                            const allowedStatuses = ['pending', 'under-verification', 'verification', 'verified'];
+                            if (!allowedStatuses.includes(application.status)) {
+                                return NextResponse.json({
+                                    success: false,
+                                    error: `Cannot approve loan from current status '${application.status}'. Application must be in pending, under-verification, or verified status.`,
+                                    code: 'INVALID_STATUS_TRANSITION'
+                                }, { status: 400 });
+                            }
+                        }
                     }
                     
                     // Step 1: Update application status to approved
@@ -71,9 +137,13 @@ export async function PATCH(
                         })
                     });
 
-                    console.log(`Application update response status: ${updateApplicationResponse.status}`);
+                    console.log(`[APPROVE] Application update response status: ${updateApplicationResponse.status}`);
+                    const updateResponseText = await updateApplicationResponse.text();
+                    console.log(`[APPROVE] Application update response:`, updateResponseText);
                     
-                    if (updateApplicationResponse.ok) {
+                    if (updateApplicationResponse.status === 200 || updateApplicationResponse.status === 204) {
+                        console.log('[APPROVE] Application status updated successfully, proceeding to create loan...');
+                        
                         // Step 2: Create a new loan record
                         const currentDate = new Date(); // Approval date
                         const startDate = new Date(currentDate); // Start from approval date
@@ -84,23 +154,26 @@ export async function PATCH(
                         const tenureMonths = parseInt(application.tenure) || 12; // Default to 12 months if not specified
                         endDate.setMonth(startDate.getMonth() + tenureMonths);
                         
+                        const loanId = crypto.randomUUID();
                         const loanData = {
-                            id: crypto.randomUUID(), // Generate UUID for loan
+                            id: loanId,
                             user_id: application.user_id,
                             principal_amount: parseFloat(application.principal_amount) || parseFloat(application.requested_amount) || 0,
-                            start_date: startDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
-                            end_date: endDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+                            start_date: startDate.toISOString().split('T')[0],
+                            end_date: endDate.toISOString().split('T')[0],
                             status: 'running',
                             assigned_agent_id: null,
-                            interest_amount: parseFloat(application.interest_amount) || null,
-                            closing_fees: parseFloat(application.closing_fees) || null,
-                            total_repayment: parseFloat(application.total_repayment) || null,
-                            repayment_type: application.repayment_type || null,
-                            tenure: application.tenure || null,
+                            interest_amount: parseFloat(application.interest_amount) || 0,
+                            closing_fees: parseFloat(application.closing_fees) || 0,
+                            total_repayment: parseFloat(application.total_repayment) || 0,
+                            repayment_type: application.repayment_type || 'monthly',
+                            tenure: String(application.tenure || '12'),
                             created_at: new Date().toISOString(),
                             updated_at: new Date().toISOString(),
-                            amount_paid: 0 // Initialize as 0 for new loans
+                            amount_paid: 0
                         };
+                        
+                        console.log('[APPROVE] Creating loan with data:', JSON.stringify(loanData, null, 2));
 
                         const createLoanResponse = await fetch(`${backendUrl}/loans`, {
                             method: 'POST',
@@ -112,10 +185,18 @@ export async function PATCH(
                             body: JSON.stringify(loanData)
                         });
 
-                        console.log(`Loan creation response status: ${createLoanResponse.status}`);
+                        console.log(`[APPROVE] Loan creation response status: ${createLoanResponse.status}`);
+                        const loanResponseText = await createLoanResponse.text();
+                        console.log(`[APPROVE] Loan creation response:`, loanResponseText);
                         
-                        if (createLoanResponse.ok) {
-                            console.log('Loan application approved and loan created successfully');
+                        if (createLoanResponse.status === 201 || createLoanResponse.status === 200) {
+                            console.log(`[APPROVE] ✓ Loan created successfully with ID: ${loanId}`);
+                            let createdLoan = null;
+                            try {
+                                createdLoan = loanResponseText ? JSON.parse(loanResponseText) : null;
+                            } catch (e) {
+                                console.log('[APPROVE] Could not parse loan response, but loan was created');
+                            }
                             
                             // Step 3: Generate and create installments
                             try {
@@ -132,9 +213,11 @@ export async function PATCH(
                                 
                                 // Generate installments based on loan details
                                 const installments = generateInstallments(loanForInstallments);
-                                console.log(`Generated ${installments.length} installments for loan ${loanData.id}`);
+                                console.log(`[APPROVE] Generated ${installments.length} installments for loan ${loanData.id}`);
+                                console.log(`[APPROVE] First 3 installments:`, installments.slice(0, 3));
                                 
                                 // Create installments in the database
+                                console.log('[APPROVE] Creating installments in database...');
                                 const installmentResult = await createInstallmentsInDatabase(
                                     installments,
                                     backendUrl,
@@ -142,7 +225,8 @@ export async function PATCH(
                                 );
                                 
                                 if (installmentResult.success) {
-                                    console.log(`Successfully created installments for loan ${loanData.id}`);
+                                    console.log(`[APPROVE] ✓ Successfully created ${installments.length} installments for loan ${loanData.id}`);
+                                    console.log('[APPROVE] ===== Approval process completed successfully =====');
                                     return NextResponse.json({
                                         success: true,
                                         message: 'Loan application approved, loan created, and installments generated successfully',
@@ -245,8 +329,8 @@ export async function PATCH(
                                 }
                             }
                         } else {
-                            const loanErrorData = await createLoanResponse.text();
-                            console.log('Loan creation error:', loanErrorData);
+                            console.log('[APPROVE] ✗ Loan creation failed');
+                            console.log('[APPROVE] Error details:', loanResponseText);
                             
                             // Application was approved but loan creation failed
                             return NextResponse.json({
@@ -256,16 +340,32 @@ export async function PATCH(
                             });
                         }
                     } else {
-                        const errorData = await updateApplicationResponse.text();
-                        console.log('Application update error:', errorData);
+                        console.log('[APPROVE] ✗ Application update failed');
+                        console.log('[APPROVE] Error details:', updateResponseText);
+                        return NextResponse.json({
+                            success: false,
+                            error: 'Failed to update application status',
+                            details: updateResponseText
+                        }, { status: 400 });
                     }
                 }
             } else {
                 const errorData = await applicationResponse.text();
-                console.log('Failed to fetch application details:', errorData);
+                console.log('[APPROVE] ✗ Failed to fetch application details');
+                console.log('[APPROVE] Error:', errorData);
+                return NextResponse.json({
+                    success: false,
+                    error: 'Failed to fetch application details',
+                    details: errorData
+                }, { status: 400 });
             }
         } catch (backendError) {
-            console.log("Backend update error:", backendError);
+            console.log("[APPROVE] ✗ Backend error:", backendError);
+            return NextResponse.json({
+                success: false,
+                error: 'Backend error during approval process',
+                details: backendError instanceof Error ? backendError.message : 'Unknown error'
+            }, { status: 500 });
         }
 
         // Fallback response (when backend is not available)

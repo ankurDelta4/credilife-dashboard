@@ -55,24 +55,64 @@ export default function LoanPage() {
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false)
+  const [users, setUsers] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [loanFormData, setLoanFormData] = useState({
-    full_name: '',
+    // User selection
+    user_selection: 'existing', // 'existing' or 'new'
+    selected_user_id: '',
+    
+    // User data (for new users or editing existing)
+    first_name: '',
+    last_name: '',
     id_number: '',
-    loan_amount: '',
-    installment_amount: '',
-    number_of_installments: '',
-    installment_due_date: '',
     email: '',
-    whatsapp: ''
+    whatsapp_number: '',
+    phone: '',
+    address: '',
+    
+    // Loan application data
+    requested_amount: '',
+    loan_purpose: '',
+    tenure: '',
+    repayment_type: 'monthly',
+    
+    // Payment schedule
+    payment_frequency: 'monthly',
+    payment_day_1: '',
+    payment_day_2: '',
+    
+    // Calculated fields
+    interest_rate: '10', // Default 10%
+    principal_amount: '',
+    interest_amount: '',
+    closing_fees: '',
+    total_repayment: ''
   })
   const { toast } = useToast()
   const itemsPerPage = 10
 
   useEffect(() => {
     fetchLoans()
+    fetchUsers()
   }, [])
+
+  const fetchUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      const response = await fetch('/api/users?limit=100')
+      const data = await response.json()
+      if (data.success) {
+        setUsers(data.data.users || [])
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
 
 
   const fetchLoans = async () => {
@@ -128,27 +168,69 @@ export default function LoanPage() {
 
   const handleNewLoan = () => {
     setLoanFormData({
-      full_name: '',
+      user_selection: 'existing',
+      selected_user_id: '',
+      first_name: '',
+      last_name: '',
       id_number: '',
-      loan_amount: '',
-      installment_amount: '',
-      number_of_installments: '',
-      installment_due_date: '',
       email: '',
-      whatsapp: ''
+      whatsapp_number: '',
+      phone: '',
+      address: '',
+      requested_amount: '',
+      loan_purpose: '',
+      tenure: '',
+      repayment_type: 'monthly',
+      payment_frequency: 'monthly',
+      payment_day_1: '',
+      payment_day_2: '',
+      interest_rate: '10',
+      principal_amount: '',
+      interest_amount: '',
+      closing_fees: '',
+      total_repayment: ''
     })
     setIsNewLoanModalOpen(true)
   }
 
   const handleLoanSubmit = async () => {
-    // Validate loan data
-    const { full_name, id_number, loan_amount, installment_amount, number_of_installments, installment_due_date, email, whatsapp } = loanFormData
+    console.log('Loan form data:', loanFormData)
     
-    if (!full_name || !id_number || !loan_amount || !installment_amount || !number_of_installments || !installment_due_date || !email || !whatsapp) {
+    // Validate based on user selection
+    if (loanFormData.user_selection === 'existing' && !loanFormData.selected_user_id) {
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Please fill in all required fields"
+        description: "Please select a customer"
+      })
+      return
+    }
+    
+    if (loanFormData.user_selection === 'new') {
+      if (!loanFormData.first_name || !loanFormData.last_name || !loanFormData.email || !loanFormData.whatsapp_number) {
+        toast({
+          variant: "destructive",
+          title: "Validation Error",
+          description: "Please fill in all customer details"
+        })
+        return
+      }
+    }
+    
+    if (!loanFormData.requested_amount || !loanFormData.tenure || !loanFormData.payment_frequency || !loanFormData.payment_day_1) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please fill in all loan details"
+      })
+      return
+    }
+    
+    if (loanFormData.payment_frequency === 'biweekly' && !loanFormData.payment_day_2) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please select second payment day for bi-weekly schedule"
       })
       return
     }
@@ -156,17 +238,81 @@ export default function LoanPage() {
     setIsCreating(true)
     
     try {
-      // Create loan application
+      // Prepare user data (including payment schedule)
+      let userData = {}
+      let userId = ''
+      
+      if (loanFormData.user_selection === 'existing') {
+        // Find selected user
+        const selectedUser = users.find(u => u.id.toString() === loanFormData.selected_user_id)
+        if (selectedUser) {
+          // Use the actual user's ID from the database
+          userId = selectedUser.id
+          userData = {
+            first_name: selectedUser.name?.split(' ')[0] || '',
+            last_name: selectedUser.name?.split(' ').slice(1).join(' ') || '',
+            email: selectedUser.email,
+            whatsapp_number: selectedUser.phone_number || '',
+            phone: selectedUser.phone_number || '',
+            id_number: selectedUser.unique_id || '',
+            // Add payment schedule to user_data
+            payment_frequency: loanFormData.payment_frequency,
+            payment_day_1: loanFormData.payment_day_1,
+            payment_day_2: loanFormData.payment_day_2
+          }
+        }
+      } else {
+        // New user - Generate UUID for user_id
+        userId = crypto.randomUUID ? crypto.randomUUID() : `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        userData = {
+          first_name: loanFormData.first_name,
+          last_name: loanFormData.last_name,
+          email: loanFormData.email,
+          whatsapp_number: loanFormData.whatsapp_number,
+          phone: loanFormData.phone || loanFormData.whatsapp_number,
+          id_number: loanFormData.id_number,
+          address: loanFormData.address,
+          // Add payment schedule to user_data
+          payment_frequency: loanFormData.payment_frequency,
+          payment_day_1: loanFormData.payment_day_1,
+          payment_day_2: loanFormData.payment_day_2
+        }
+      }
+      
+      // Calculate loan amounts
+      const principal = parseFloat(loanFormData.requested_amount)
+      const interestRate = parseFloat(loanFormData.interest_rate) / 100
+      const interestAmount = principal * interestRate
+      const closingFees = principal * 0.02 // 2% closing fees
+      const totalRepayment = principal + interestAmount + closingFees
+      
+      // Prepare loan application data - ONLY use actual column names
+      const applicationData = {
+        user_id: userId,
+        requested_amount: principal || 0,
+        loan_purpose: loanFormData.loan_purpose || 'Personal Loan',
+        status: 'pending',
+        current_stage: 'application_submitted',
+        is_renewal: false,
+        interest_amount: interestAmount || 0,
+        principal_amount: principal || 0,
+        closing_fees: closingFees || 0,
+        total_repayment: totalRepayment || 0,
+        user_data: userData, // This will be stringified by the API
+        tenure: parseInt(loanFormData.tenure) || 12,
+        repayment_type: loanFormData.repayment_type || 'monthly',
+        id_number: loanFormData.id_number ? parseInt(loanFormData.id_number) : null,
+        questions_count: 0
+      }
+      
+      console.log('Creating loan application:', applicationData)
+      
       const response = await fetch('/api/loan-applications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...loanFormData,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        })
+        body: JSON.stringify(applicationData)
       })
       
       const data = await response.json()
@@ -181,13 +327,13 @@ export default function LoanPage() {
         setIsNewLoanModalOpen(false)
         fetchLoans()
       } else {
-        throw new Error(data.error || 'Failed to create loan')
+        throw new Error(data.error || 'Failed to create loan application')
       }
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create loan"
+        description: error instanceof Error ? error.message : "Failed to create loan application"
       })
     } finally {
       setIsCreating(false)
@@ -196,7 +342,34 @@ export default function LoanPage() {
 
 
   const handleFormChange = (field: string, value: string) => {
-    setLoanFormData(prev => ({ ...prev, [field]: value }))
+    setLoanFormData(prev => {
+      const updated = { ...prev, [field]: value }
+      
+      // Auto-fill user data when existing user is selected
+      if (field === 'selected_user_id' && value) {
+        const selectedUser = users.find(u => u.id.toString() === value)
+        if (selectedUser) {
+          updated.first_name = selectedUser.name?.split(' ')[0] || ''
+          updated.last_name = selectedUser.name?.split(' ').slice(1).join(' ') || ''
+          updated.email = selectedUser.email || ''
+          updated.whatsapp_number = selectedUser.phone_number || ''
+          updated.phone = selectedUser.phone_number || ''
+          updated.id_number = selectedUser.unique_id?.toString() || ''
+        }
+      }
+      
+      // Calculate loan amounts when amount or rate changes
+      if (field === 'requested_amount' || field === 'interest_rate') {
+        const principal = parseFloat(updated.requested_amount) || 0
+        const rate = parseFloat(updated.interest_rate) / 100 || 0
+        updated.principal_amount = principal.toString()
+        updated.interest_amount = (principal * rate).toFixed(2)
+        updated.closing_fees = (principal * 0.02).toFixed(2) // 2% closing fees
+        updated.total_repayment = (principal + (principal * rate) + (principal * 0.02)).toFixed(2)
+      }
+      
+      return updated
+    })
   }
 
   const handleExportLoans = async () => {
@@ -417,117 +590,337 @@ export default function LoanPage() {
           loan={selectedLoan}
         />
 
-        {/* New Loan Modal */}
+        {/* New Loan Application Modal */}
         <Dialog open={isNewLoanModalOpen} onOpenChange={setIsNewLoanModalOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>New Loan Registration</DialogTitle>
+              <DialogTitle>New Loan Application</DialogTitle>
               <DialogDescription>
-                Register a new loan for an existing client
+                Create a new loan application for a customer
               </DialogDescription>
             </DialogHeader>
             
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="full_name">Full Name *</Label>
-                  <Input
-                    id="full_name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={loanFormData.full_name}
-                    onChange={(e) => handleFormChange('full_name', e.target.value)}
-                  />
+            <div className="space-y-6 py-4">
+              {/* Customer Selection */}
+              <div className="space-y-4 p-4 border rounded-lg">
+                <h3 className="font-semibold text-sm">Customer Information</h3>
+                
+                <div className="flex gap-4">
+                  <Label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      value="existing"
+                      checked={loanFormData.user_selection === 'existing'}
+                      onChange={(e) => handleFormChange('user_selection', e.target.value)}
+                    />
+                    Select Existing Customer
+                  </Label>
+                  <Label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      value="new"
+                      checked={loanFormData.user_selection === 'new'}
+                      onChange={(e) => handleFormChange('user_selection', e.target.value)}
+                    />
+                    Create New Customer
+                  </Label>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="id_number">ID Number (11 digits) *</Label>
-                  <Input
-                    id="id_number"
-                    type="text"
-                    placeholder="12345678901"
-                    maxLength={11}
-                    value={loanFormData.id_number}
-                    onChange={(e) => handleFormChange('id_number', e.target.value)}
-                  />
-                </div>
+                {loanFormData.user_selection === 'existing' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="selected_user">Select Customer *</Label>
+                    <Select
+                      value={loanFormData.selected_user_id}
+                      onValueChange={(value) => handleFormChange('selected_user_id', value)}
+                    >
+                      <SelectTrigger id="selected_user">
+                        <SelectValue placeholder="Select a customer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {loadingUsers ? (
+                          <SelectItem value="loading" disabled>Loading customers...</SelectItem>
+                        ) : users.length === 0 ? (
+                          <SelectItem value="no-users" disabled>No customers found</SelectItem>
+                        ) : (
+                          users.map((user) => (
+                            <SelectItem key={user.id} value={user.id.toString()}>
+                              {user.name} - {user.email} {user.phone_number && `(${user.phone_number})`}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    
+                    {loanFormData.selected_user_id && (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-lg text-sm">
+                        <p><strong>Name:</strong> {loanFormData.first_name} {loanFormData.last_name}</p>
+                        <p><strong>Email:</strong> {loanFormData.email}</p>
+                        <p><strong>WhatsApp:</strong> {loanFormData.whatsapp_number}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="first_name">First Name *</Label>
+                      <Input
+                        id="first_name"
+                        type="text"
+                        placeholder="John"
+                        value={loanFormData.first_name}
+                        onChange={(e) => handleFormChange('first_name', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="last_name">Last Name *</Label>
+                      <Input
+                        id="last_name"
+                        type="text"
+                        placeholder="Doe"
+                        value={loanFormData.last_name}
+                        onChange={(e) => handleFormChange('last_name', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email *</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="john@example.com"
+                        value={loanFormData.email}
+                        onChange={(e) => handleFormChange('email', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="whatsapp_number">WhatsApp Number *</Label>
+                      <Input
+                        id="whatsapp_number"
+                        type="tel"
+                        placeholder="+1234567890"
+                        value={loanFormData.whatsapp_number}
+                        onChange={(e) => handleFormChange('whatsapp_number', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="id_number">ID Number</Label>
+                      <Input
+                        id="id_number"
+                        type="text"
+                        placeholder="12345678901"
+                        value={loanFormData.id_number}
+                        onChange={(e) => handleFormChange('id_number', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="address">Address</Label>
+                      <Input
+                        id="address"
+                        type="text"
+                        placeholder="123 Main St"
+                        value={loanFormData.address}
+                        onChange={(e) => handleFormChange('address', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="loan_amount">Loan Amount *</Label>
-                  <Input
-                    id="loan_amount"
-                    type="number"
-                    placeholder="5000"
-                    value={loanFormData.loan_amount}
-                    onChange={(e) => handleFormChange('loan_amount', e.target.value)}
-                  />
+              {/* Loan Details */}
+              <div className="space-y-4 p-4 border rounded-lg">
+                <h3 className="font-semibold text-sm">Loan Details</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="requested_amount">Requested Amount *</Label>
+                    <Input
+                      id="requested_amount"
+                      type="number"
+                      placeholder="5000"
+                      value={loanFormData.requested_amount}
+                      onChange={(e) => handleFormChange('requested_amount', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="loan_purpose">Loan Purpose</Label>
+                    <Input
+                      id="loan_purpose"
+                      type="text"
+                      placeholder="Personal Loan"
+                      value={loanFormData.loan_purpose}
+                      onChange={(e) => handleFormChange('loan_purpose', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tenure">Tenure (Months) *</Label>
+                    <Select
+                      value={loanFormData.tenure}
+                      onValueChange={(value) => handleFormChange('tenure', value)}
+                    >
+                      <SelectTrigger id="tenure">
+                        <SelectValue placeholder="Select tenure" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 Months</SelectItem>
+                        <SelectItem value="6">6 Months</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="interest_rate">Interest Rate (%) *</Label>
+                    <Input
+                      id="interest_rate"
+                      type="number"
+                      placeholder="10"
+                      value={loanFormData.interest_rate}
+                      onChange={(e) => handleFormChange('interest_rate', e.target.value)}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="installment_amount">Installment Amount *</Label>
-                  <Input
-                    id="installment_amount"
-                    type="number"
-                    placeholder="1000"
-                    value={loanFormData.installment_amount}
-                    onChange={(e) => handleFormChange('installment_amount', e.target.value)}
-                  />
-                </div>
+                {/* Calculated Amounts */}
+                {loanFormData.requested_amount && (
+                  <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 rounded-lg">
+                    <div className="text-sm">
+                      <span className="font-medium">Principal:</span> ${loanFormData.principal_amount || '0'}
+                    </div>
+                    <div className="text-sm">
+                      <span className="font-medium">Interest:</span> ${loanFormData.interest_amount || '0'}
+                    </div>
+                    <div className="text-sm">
+                      <span className="font-medium">Closing Fees:</span> ${loanFormData.closing_fees || '0'}
+                    </div>
+                    <div className="text-sm font-semibold">
+                      <span>Total Repayment:</span> ${loanFormData.total_repayment || '0'}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="number_of_installments">Number of Installments *</Label>
-                  <Input
-                    id="number_of_installments"
-                    type="number"
-                    placeholder="6"
-                    value={loanFormData.number_of_installments}
-                    onChange={(e) => handleFormChange('number_of_installments', e.target.value)}
-                  />
+              {/* Payment Schedule */}
+              <div className="space-y-4 p-4 border rounded-lg">
+                <h3 className="font-semibold text-sm">Payment Schedule</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="payment_frequency">Payment Frequency *</Label>
+                    <Select
+                      value={loanFormData.payment_frequency}
+                      onValueChange={(value) => handleFormChange('payment_frequency', value)}
+                    >
+                      <SelectTrigger id="payment_frequency">
+                        <SelectValue placeholder="Select frequency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="biweekly">Bi-weekly (Twice a month)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="repayment_type">Repayment Type *</Label>
+                    <Select
+                      value={loanFormData.repayment_type}
+                      onValueChange={(value) => handleFormChange('repayment_type', value)}
+                    >
+                      <SelectTrigger id="repayment_type">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="installment_due_date">First Installment Due Date *</Label>
-                  <Input
-                    id="installment_due_date"
-                    type="date"
-                    value={loanFormData.installment_due_date}
-                    onChange={(e) => handleFormChange('installment_due_date', e.target.value)}
-                  />
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                {loanFormData.payment_frequency === 'monthly' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="payment_day_1">Payment Due Day *</Label>
+                      <Select
+                        value={loanFormData.payment_day_1}
+                        onValueChange={(value) => handleFormChange('payment_day_1', value)}
+                      >
+                        <SelectTrigger id="payment_day_1">
+                          <SelectValue placeholder="Select day" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[...Array(28)].map((_, i) => (
+                            <SelectItem key={i + 1} value={(i + 1).toString()}>
+                              Day {i + 1}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Payment will be due on day {loanFormData.payment_day_1 || '?'} of each month
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="payment_day_1">First Payment Day *</Label>
+                      <Select
+                        value={loanFormData.payment_day_1}
+                        onValueChange={(value) => handleFormChange('payment_day_1', value)}
+                      >
+                        <SelectTrigger id="payment_day_1">
+                          <SelectValue placeholder="Select day" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[...Array(15)].map((_, i) => (
+                            <SelectItem key={i + 1} value={(i + 1).toString()}>
+                              Day {i + 1}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        First payment of the month
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="payment_day_2">Second Payment Day *</Label>
+                      <Select
+                        value={loanFormData.payment_day_2}
+                        onValueChange={(value) => handleFormChange('payment_day_2', value)}
+                      >
+                        <SelectTrigger id="payment_day_2">
+                          <SelectValue placeholder="Select day" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[...Array(13)].map((_, i) => (
+                            <SelectItem key={i + 16} value={(i + 16).toString()}>
+                              Day {i + 16}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Second payment of the month
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="john@example.com"
-                    value={loanFormData.email}
-                    onChange={(e) => handleFormChange('email', e.target.value)}
-                  />
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="whatsapp">WhatsApp Number *</Label>
-                  <Input
-                    id="whatsapp"
-                    type="tel"
-                    placeholder="+1234567890"
-                    value={loanFormData.whatsapp}
-                    onChange={(e) => handleFormChange('whatsapp', e.target.value)}
-                  />
+                <div className="bg-blue-50 p-4 rounded-lg space-y-2">
+                  <p className="text-sm text-blue-800">
+                    <strong>Payment Schedule:</strong>
+                    {loanFormData.payment_frequency === 'monthly' ? (
+                      <> Payments will be due on day {loanFormData.payment_day_1 || '?'} of each month.</>
+                    ) : (
+                      <> Payments will be due on days {loanFormData.payment_day_1 || '?'} and {loanFormData.payment_day_2 || '?'} of each month.</>
+                    )}
+                  </p>
+                  <p className="text-sm text-blue-800">
+                    <strong>Reminders:</strong> Notifications will be sent 7 and 3 days before each payment due date.
+                  </p>
                 </div>
-              </div>
-
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> Email and WhatsApp will be used for sending payment reminders 7 and 3 days before the due date.
-                </p>
               </div>
             </div>
 
@@ -542,7 +935,7 @@ export default function LoanPage() {
                 onClick={handleLoanSubmit}
                 disabled={isCreating}
               >
-                {isCreating ? 'Creating...' : 'Create Loan'}
+                {isCreating ? 'Creating Application...' : 'Create Loan Application'}
               </Button>
             </DialogFooter>
           </DialogContent>

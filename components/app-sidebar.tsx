@@ -60,7 +60,7 @@ const menuItems = [
   },
   {
     title: "Notifications",
-    url: "/notifications",
+    url: "/settings/notifications",
     icon: Bell,
   }
 ]
