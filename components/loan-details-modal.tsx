@@ -125,14 +125,22 @@ export function LoanDetailsModal({
         const closingFee = apiData?.closing_fees || 0
         const totalInterest = apiData?.interest_amount || 0
         const totalAmount = apiData?.total_repayment || 0
-        const paidAmount = apiData?.amount_paid || 0
+        
+        // Calculate paid amount from actual installments data
+        // First check if we have installments from the separate API call
+        const installmentsForCalculation = installments.length > 0 ? installments : (apiData?.installments || [])
+        
+        // Calculate paid amount by summing amount_paid from verified installments
+        const paidAmount = installmentsForCalculation
+            .filter((inst: any) => inst.payment_verified === true)
+            .reduce((sum: number, inst: any) => sum + (inst.amount_paid || 0), 0)
         
         // Calculate installments based on installments data
         const installmentsData = apiData?.installments || []
         const totalInstallments = termMonths // Based on tenure
         
         // Calculate paid installments from installments data
-        const paidInstallments = installmentsData.filter((inst: any) => inst.payment_verified === true).length
+        const paidInstallments = installmentsForCalculation.filter((inst: any) => inst.payment_verified === true).length
         const remainingInstallments = Math.max(0, totalInstallments - paidInstallments)
         
         // Calculate installment amount
