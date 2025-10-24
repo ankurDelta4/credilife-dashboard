@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateSequentialUniqueId } from '@/lib/utils/unique-id';
 
 // Mock users database (same as main route)
 let users = [
     {
         id: 1,
+        unique_id: 'USR-2024-000001',
         name: 'John Doe',
         email: 'john@example.com',
         phone_number: '+1-555-0101',
@@ -12,6 +14,7 @@ let users = [
     },
     {
         id: 2,
+        unique_id: 'USR-2024-000002',
         name: 'Jane Smith',
         email: 'jane@example.com',
         phone_number: '+1-555-0102',
@@ -20,6 +23,7 @@ let users = [
     },
     {
         id: 3,
+        unique_id: 'USR-2024-000003',
         name: 'Bob Johnson',
         email: 'bob@example.com',
         phone_number: '+1-555-0103',
@@ -69,15 +73,44 @@ export async function POST(request: NextRequest) {
         // Try to create users in Supabase first
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
         
-        // Prepare users for bulk creation
-        const usersToCreate = bulkUsers.map((user: BulkUser) => ({
-            name: user.name.trim(),
-            email: user.email.trim().toLowerCase(),
-            phone_number: user.phone_number,
-            role: user.role || 'user',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-        }));
+        // Get the last unique ID to continue the sequence
+        let lastUniqueId = null;
+        try {
+            const lastUserResponse = await fetch(`${backendUrl}/users?select=unique_id&order=created_at.desc&limit=1`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': `${process.env.API_KEY || ''}`,
+                    'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                },
+            });
+            
+            if (lastUserResponse.ok) {
+                const lastUsers = await lastUserResponse.json();
+                lastUniqueId = lastUsers[0]?.unique_id || null;
+            }
+        } catch {
+            // Continue without last ID
+        }
+        
+        // Prepare users for bulk creation with unique IDs
+        const usersToCreate: any[] = [];
+        let currentUniqueId = lastUniqueId;
+        
+        for (const user of bulkUsers) {
+            // Generate sequential unique ID for each user
+            currentUniqueId = generateSequentialUniqueId(currentUniqueId, 'USR');
+            
+            usersToCreate.push({
+                name: user.name.trim(),
+                email: user.email.trim().toLowerCase(),
+                phone_number: user.phone_number,
+                role: user.role || 'user',
+                unique_id: currentUniqueId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            });
+        }
 
         try {
             console.log('Creating bulk users with data:', usersToCreate);
@@ -155,6 +188,12 @@ export async function POST(request: NextRequest) {
 
                 // Try backend creation for individual user
                 try {
+                    // Generate unique ID for individual creation
+                    const individualUniqueId = generateSequentialUniqueId(
+                        results.users[results.users.length - 1]?.unique_id || lastUniqueId,
+                        'USR'
+                    );
+                    
                     const singleUserResponse = await fetch(`${backendUrl}/users`, {
                         method: 'POST',
                         headers: {
@@ -168,6 +207,7 @@ export async function POST(request: NextRequest) {
                             email: user.email.trim().toLowerCase(),
                             phone_number: user.phone_number,
                             role: user.role || 'user',
+                            unique_id: individualUniqueId,
                             created_at: new Date().toISOString(),
                             updated_at: new Date().toISOString()
                         })
@@ -187,8 +227,14 @@ export async function POST(request: NextRequest) {
                     }
                 } catch {
                     // Fallback to mock data
+                    const fallbackUniqueId = generateSequentialUniqueId(
+                        results.users[results.users.length - 1]?.unique_id || users[users.length - 1]?.unique_id || null,
+                        'USR'
+                    );
+                    
                     const newUser = {
                         id: Math.max(...users.map(u => u.id)) + results.created + 1,
+                        unique_id: fallbackUniqueId,
                         name: user.name.trim(),
                         email: user.email.trim().toLowerCase(),
                         phone_number: user.phone_number,

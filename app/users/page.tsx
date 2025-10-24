@@ -44,7 +44,7 @@ interface User {
   status: string
   createdAt: string
   phone_number?: string
-  unique_id?: number
+  unique_id?: string
   totalLoans?: number
   created_at?: Date
 }

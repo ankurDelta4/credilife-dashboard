@@ -13,7 +13,7 @@ import { bulkExport } from "@/lib/utils/export-utils"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Plus, Search, Filter, ChevronLeft, ChevronRight, Download } from "lucide-react"
+import { Plus, Search, Filter, ChevronLeft, ChevronRight, Download, X, Loader2 } from "lucide-react"
 import {
     Pagination,
     PaginationContent,
@@ -55,10 +55,15 @@ export default function LoanPage() {
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [isNewLoanModalOpen, setIsNewLoanModalOpen] = useState(false)
-  const [users, setUsers] = useState<any[]>([])
-  const [loadingUsers, setLoadingUsers] = useState(false)
+  // Removed users array - using search instead
   const [isCreating, setIsCreating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  // Search functionality
+  const [userSearchQuery, setUserSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null)
   const [loanFormData, setLoanFormData] = useState({
     // User selection
     user_selection: 'existing', // 'existing' or 'new'
@@ -96,21 +101,83 @@ export default function LoanPage() {
 
   useEffect(() => {
     fetchLoans()
-    fetchUsers()
+    // Don't fetch all users anymore - we'll use search instead
   }, [])
 
-  const fetchUsers = async () => {
-    try {
-      setLoadingUsers(true)
-      const response = await fetch('/api/users?limit=100')
-      const data = await response.json()
-      if (data.success) {
-        setUsers(data.data.users || [])
+  // Search users with debounce
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout)
+    }
+
+    if (!userSearchQuery || userSearchQuery.length < 1) {
+      setSearchResults([])
+      return
+    }
+
+    const timeout = setTimeout(async () => {
+      setIsSearching(true)
+      try {
+        const response = await fetch(`/api/users/search?q=${encodeURIComponent(userSearchQuery)}&limit=10`)
+        const data = await response.json()
+        if (data.success) {
+          setSearchResults(data.users || [])
+        }
+      } catch (error) {
+        console.error('Search error:', error)
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
       }
-    } catch (error) {
-      console.error('Error fetching users:', error)
-    } finally {
-      setLoadingUsers(false)
+    }, 300) // 300ms debounce
+
+    setSearchTimeout(timeout)
+
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout)
+      }
+    }
+  }, [userSearchQuery])
+
+  // Select user from search
+  const selectUser = (user: any) => {
+    setSelectedUser(user)
+    setUserSearchQuery('')
+    setSearchResults([])
+    
+    // Update form data
+    setLoanFormData(prev => ({
+      ...prev,
+      selected_user_id: user.id.toString(),
+      first_name: user.name?.split(' ')[0] || '',
+      last_name: user.name?.split(' ').slice(1).join(' ') || '',
+      email: user.email,
+      whatsapp_number: user.phone_number || '',
+      phone: user.phone_number || '',
+      id_number: user.unique_id || ''
+    }))
+  }
+
+  // Clear selected user
+  const clearSelectedUser = () => {
+    setSelectedUser(null)
+    setLoanFormData(prev => ({
+      ...prev,
+      selected_user_id: '',
+      first_name: '',
+      last_name: '',
+      email: '',
+      whatsapp_number: '',
+      phone: '',
+      id_number: ''
+    }))
+  }
+
+  // Handle Enter key for quick selection
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && searchResults.length > 0) {
+      selectUser(searchResults[0])
     }
   }
 
@@ -243,18 +310,17 @@ export default function LoanPage() {
       let userId = ''
       
       if (loanFormData.user_selection === 'existing') {
-        // Find selected user
-        const selectedUser = users.find(u => u.id.toString() === loanFormData.selected_user_id)
+        // Use the selected user's data (already populated in form)
         if (selectedUser) {
           // Use the actual user's ID from the database
           userId = selectedUser.id
           userData = {
-            first_name: selectedUser.name?.split(' ')[0] || '',
-            last_name: selectedUser.name?.split(' ').slice(1).join(' ') || '',
-            email: selectedUser.email,
-            whatsapp_number: selectedUser.phone_number || '',
-            phone: selectedUser.phone_number || '',
-            id_number: selectedUser.unique_id || '',
+            first_name: loanFormData.first_name,
+            last_name: loanFormData.last_name,
+            email: loanFormData.email,
+            whatsapp_number: loanFormData.whatsapp_number,
+            phone: loanFormData.phone,
+            id_number: loanFormData.id_number,
             // Add payment schedule to user_data
             payment_frequency: loanFormData.payment_frequency,
             payment_day_1: loanFormData.payment_day_1,
@@ -344,19 +410,6 @@ export default function LoanPage() {
   const handleFormChange = (field: string, value: string) => {
     setLoanFormData(prev => {
       const updated = { ...prev, [field]: value }
-      
-      // Auto-fill user data when existing user is selected
-      if (field === 'selected_user_id' && value) {
-        const selectedUser = users.find(u => u.id.toString() === value)
-        if (selectedUser) {
-          updated.first_name = selectedUser.name?.split(' ')[0] || ''
-          updated.last_name = selectedUser.name?.split(' ').slice(1).join(' ') || ''
-          updated.email = selectedUser.email || ''
-          updated.whatsapp_number = selectedUser.phone_number || ''
-          updated.phone = selectedUser.phone_number || ''
-          updated.id_number = selectedUser.unique_id?.toString() || ''
-        }
-      }
       
       // Calculate loan amounts when amount or rate changes
       if (field === 'requested_amount' || field === 'interest_rate') {
@@ -628,34 +681,68 @@ export default function LoanPage() {
 
                 {loanFormData.user_selection === 'existing' ? (
                   <div className="space-y-2">
-                    <Label htmlFor="selected_user">Select Customer *</Label>
-                    <Select
-                      value={loanFormData.selected_user_id}
-                      onValueChange={(value) => handleFormChange('selected_user_id', value)}
-                    >
-                      <SelectTrigger id="selected_user">
-                        <SelectValue placeholder="Select a customer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {loadingUsers ? (
-                          <SelectItem value="loading" disabled>Loading customers...</SelectItem>
-                        ) : users.length === 0 ? (
-                          <SelectItem value="no-users" disabled>No customers found</SelectItem>
-                        ) : (
-                          users.map((user) => (
-                            <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.name} - {user.email} {user.phone_number && `(${user.phone_number})`}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="user_search">Search Customer by Unique ID or Name *</Label>
+                    <div className="relative">
+                      <Input
+                        id="user_search"
+                        type="text"
+                        placeholder="Type unique ID (e.g., K9P2X5) or name..."
+                        value={userSearchQuery}
+                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                        onKeyDown={handleSearchKeyDown}
+                      />
+                      
+                      {/* Search Results Dropdown */}
+                      {userSearchQuery && searchResults.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                          {searchResults.map((user) => (
+                            <div
+                              key={user.id}
+                              className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                              onClick={() => selectUser(user)}
+                            >
+                              <div className="font-medium">{user.unique_id} - {user.name}</div>
+                              <div className="text-sm text-gray-500">{user.phone_number}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {userSearchQuery && isSearching && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg p-4">
+                          <div className="flex items-center justify-center">
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Searching...
+                          </div>
+                        </div>
+                      )}
+                      
+                      {userSearchQuery && !isSearching && searchResults.length === 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg p-4">
+                          <div className="text-sm text-gray-500">No customers found</div>
+                        </div>
+                      )}
+                    </div>
                     
-                    {loanFormData.selected_user_id && (
-                      <div className="mt-2 p-3 bg-gray-50 rounded-lg text-sm">
-                        <p><strong>Name:</strong> {loanFormData.first_name} {loanFormData.last_name}</p>
-                        <p><strong>Email:</strong> {loanFormData.email}</p>
-                        <p><strong>WhatsApp:</strong> {loanFormData.whatsapp_number}</p>
+                    {/* Selected User Display */}
+                    {selectedUser && (
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium">ID: {selectedUser.unique_id}</p>
+                            <p className="text-sm">{selectedUser.name}</p>
+                            <p className="text-sm text-gray-600">{selectedUser.email}</p>
+                            <p className="text-sm text-gray-600">{selectedUser.phone_number}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => clearSelectedUser()}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>

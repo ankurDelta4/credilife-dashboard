@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateSequentialUniqueId, generateShortUniqueId } from '@/lib/utils/unique-id';
 
 // Mock users database
 let users = [
     {
         id: 1,
+        unique_id: 'USR-2024-000001',
         name: 'John Doe',
         email: 'john@example.com',
         phone_number: '+1-555-0101',
@@ -13,6 +15,7 @@ let users = [
     },
     {
         id: 2,
+        unique_id: 'USR-2024-000002',
         name: 'Jane Smith',
         email: 'jane@example.com',
         phone_number: '+1-555-0102',
@@ -22,6 +25,7 @@ let users = [
     },
     {
         id: 3,
+        unique_id: 'USR-2024-000003',
         name: 'Bob Johnson',
         email: 'bob@example.com',
         phone_number: '+1-555-0103',
@@ -187,8 +191,34 @@ export async function POST(request: NextRequest) {
         // Try to create user in Supabase first
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
         
+        // Generate unique ID for the new user
+        // First, get the last user to determine the sequence
+        let uniqueId = '';
         try {
-            console.log('Creating user with data:', { name, email, phone_number, role, status });
+            const lastUserResponse = await fetch(`${backendUrl}/users?select=unique_id&order=created_at.desc&limit=1`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': `${process.env.API_KEY || ''}`,
+                    'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                },
+            });
+            
+            if (lastUserResponse.ok) {
+                const lastUsers = await lastUserResponse.json();
+                const lastUniqueId = lastUsers[0]?.unique_id || null;
+                uniqueId = generateSequentialUniqueId(lastUniqueId, 'USR');
+            } else {
+                // Fallback to short unique ID if can't get last ID
+                uniqueId = `USR-${generateShortUniqueId()}`;
+            }
+        } catch {
+            // Fallback to short unique ID
+            uniqueId = `USR-${generateShortUniqueId()}`;
+        }
+        
+        try {
+            console.log('Creating user with data:', { name, email, phone_number, role, status, unique_id: uniqueId });
             
             const backendResponse = await fetch(`${backendUrl}/users`, {
                 method: 'POST',
@@ -203,6 +233,7 @@ export async function POST(request: NextRequest) {
                     email,
                     phone_number,
                     role,
+                    unique_id: uniqueId,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 })
@@ -251,8 +282,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Generate unique ID for fallback user
+        const lastMockUser = users.sort((a, b) => b.id - a.id)[0];
+        const fallbackUniqueId = generateSequentialUniqueId(lastMockUser?.unique_id || null, 'USR');
+        
         const newUser = {
             id: Math.max(...users.map(u => u.id)) + 1,
+            unique_id: fallbackUniqueId,
             name,
             email,
             phone_number,
