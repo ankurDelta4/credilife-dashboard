@@ -34,37 +34,66 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-        const userId = parseInt(id);
-
-        if (isNaN(userId)) {
+        
+        if (!id) {
             return NextResponse.json(
                 {
                     success: false,
-                    error: 'Invalid user ID',
+                    error: 'User ID is required',
                     code: 'INVALID_ID'
                 },
                 { status: 400 }
             );
         }
 
-        const user = users.find(u => u.id === userId);
+        const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
+        const apiKey = process.env.API_KEY || '';
+        
+        // Fetch user by their database ID (UUID)
+        const response = await fetch(
+            `${backendUrl}/users?id=eq.${id}&select=*`,
+            {
+                headers: {
+                    'apikey': apiKey,
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
 
-        if (!user) {
-            return NextResponse.json(
-                {
-                    success: false,
-                    error: 'User not found',
-                    code: 'USER_NOT_FOUND'
-                },
-                { status: 404 }
-            );
+        if (response.ok) {
+            const users = await response.json();
+            
+            if (users && users.length > 0) {
+                return NextResponse.json({
+                    success: true,
+                    data: { user: users[0] },
+                    message: 'User retrieved successfully'
+                });
+            }
         }
 
-        return NextResponse.json({
-            success: true,
-            data: { user },
-            message: 'User retrieved successfully'
-        });
+        // Fallback to mock data if not found or error
+        const userId = parseInt(id);
+        if (!isNaN(userId)) {
+            const user = users.find(u => u.id === userId);
+            if (user) {
+                return NextResponse.json({
+                    success: true,
+                    data: { user },
+                    message: 'User retrieved successfully (fallback)'
+                });
+            }
+        }
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'User not found',
+                code: 'USER_NOT_FOUND'
+            },
+            { status: 404 }
+        );
 
     } catch (error) {
         return NextResponse.json(

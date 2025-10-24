@@ -888,13 +888,25 @@ export default function LoanApplicationsPage() {
                     )
                 )
                 console.log("Loan application approved:", applicationId)
+                console.log("Approval response:", data)
                 
                 // Show success toast with loan creation info
                 if (data.data?.loanId) {
                     toast({
                         variant: "success",
-                        title: "Application Approved",
-                        description: `Loan application approved and loan created successfully. Loan ID: ${data.data.loanId}`
+                        title: "✅ Application Approved & Loan Created",
+                        description: `Loan ID: ${data.data.loanId} | ${data.data.installmentsCreated || 0} installments created`
+                    })
+                    
+                    // Optionally refresh the page after successful loan creation
+                    setTimeout(() => {
+                        fetchApplications()
+                    }, 2000)
+                } else if (data.message?.includes("already approved")) {
+                    toast({
+                        variant: "default",
+                        title: "Application Already Approved",
+                        description: data.message
                     })
                 } else {
                     toast({

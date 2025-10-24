@@ -34,6 +34,7 @@ export function LoanDetailsModal({
     const [showSettlementDialog, setShowSettlementDialog] = useState(false)
     const [showTerminateDialog, setShowTerminateDialog] = useState(false)
     const [actionLoading, setActionLoading] = useState(false)
+    const [userInfo, setUserInfo] = useState<any>(null)
 
     useEffect(() => {
         if (loan && isOpen) {
@@ -41,6 +42,12 @@ export function LoanDetailsModal({
             fetchInstallments()
         }
     }, [loan?.id, isOpen])
+
+    useEffect(() => {
+        if (loan && isOpen) {
+            fetchUserInfo()
+        }
+    }, [loan?.id, isOpen, loanDetails])
 
     const fetchLoanDetails = async () => {
         if (!loan?.id) return
@@ -83,6 +90,24 @@ export function LoanDetailsModal({
             setInstallments([])
         } finally {
             setInstallmentsLoading(false)
+        }
+    }
+
+    const fetchUserInfo = async () => {
+        const userId = (loanDetails?.loan || loan)?.user_id || loan.userId
+        if (!userId) return
+        
+        try {
+            // Fetch user by their database ID to get unique_id
+            const response = await fetch(`/api/users/${userId}`)
+            const data = await response.json()
+            
+            if (data.success && data.data?.user) {
+                setUserInfo(data.data.user)
+                console.log('User info fetched:', data.data.user)
+            }
+        } catch (err) {
+            console.error('Error fetching user info:', err)
         }
     }
 
@@ -286,12 +311,12 @@ export function LoanDetailsModal({
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
-                            <span className="text-sm font-medium text-gray-600">Customer ID:</span>
-                            <p className="text-lg font-semibold break-all">{(loanDetails?.loan || loan)?.user_id || loan.userId || 'N/A'}</p>
+                            <span className="text-sm font-medium text-gray-600">Customer Unique ID:</span>
+                            <p className="text-lg font-semibold break-all">{userInfo?.unique_id || 'Loading...'}</p>
                         </div>
                         <div>
-                            <span className="text-sm font-medium text-gray-600">Loan ID:</span>
-                            <p className="text-lg font-semibold break-all">{loan.id}</p>
+                            <span className="text-sm font-medium text-gray-600">Customer Name:</span>
+                            <p className="text-lg font-semibold break-all">{userInfo?.name || loan.userId || 'N/A'}</p>
                         </div>
                         <div>
                             <span className="text-sm font-medium text-gray-600">Start Date:</span>
