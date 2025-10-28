@@ -129,6 +129,7 @@ export default function UsersPage() {
     name: '',
     email: '',
     phone: '',
+    password: '',
     role: 'user'
   })
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false)
@@ -184,7 +185,7 @@ export default function UsersPage() {
 
 
   const handleNewUser = () => {
-    setFormData({ name: '', email: '', phone: '', role: 'user' })
+    setFormData({ name: '', email: '', phone: '', password: '', role: 'user' })
     setIsDialogOpen(true)
   }
 
@@ -224,11 +225,11 @@ export default function UsersPage() {
   }
 
   const handleSubmitUser = async () => {
-    if (!formData.name || !formData.email || !formData.phone) {
+    if (!formData.name || !formData.email || !formData.phone || !formData.password) {
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: "Please fill in all required fields"
+        description: "Please fill in all required fields including password"
       })
       return
     }
@@ -245,27 +246,36 @@ export default function UsersPage() {
 
     try {
       setCreating(true)
-      const response = await fetch('/api/users', {
+      
+      // Call Supabase auth function to create user
+      const supabaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co'
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_API_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4amZxdmRocGhrdWd1dGtvdmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjgyMTEzMjMsImV4cCI6MjA0Mzc4NzMyM30.sLdFz4jnaQVkBBrPqUMF92Yl_uPDDpc_0VjNXIIjmSI'
+      
+      const response = await fetch(`${supabaseUrl}/functions/v1/auth`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'apikey': supabaseAnonKey,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           name: formData.name,
-          email: formData.email,
           phone_number: formData.phone,
           role: 'user',
-          status: 'active'
+          email: formData.email,
+          unique_id: '', // Let the backend handle unique_id generation
+          action: 'login', // Using login as it handles both signup and login
+          password: formData.password
         })
       })
 
       const data = await response.json()
 
-      if (data.success) {
+      if (response.ok && data.user) {
         // Refresh users list
         await fetchUsers()
         setIsDialogOpen(false)
-        setFormData({ name: '', email: '', phone: '', role: 'user' })
+        setFormData({ name: '', email: '', phone: '', password: '', role: 'user' })
         toast({
           variant: "success",
           title: "Success",
@@ -275,7 +285,7 @@ export default function UsersPage() {
         toast({
           variant: "destructive",
           title: "Creation Failed",
-          description: data.error || "Failed to create customer"
+          description: data.message || data.error || "Failed to create customer"
         })
       }
     } catch (error) {
@@ -409,6 +419,16 @@ export default function UsersPage() {
                     )}
                   </p>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="Enter password"
+                    value={formData.password}
+                    onChange={(e) => handleFormChange('password', e.target.value)}
+                  />
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button 
                     variant="outline" 
@@ -419,7 +439,7 @@ export default function UsersPage() {
                   </Button>
                   <Button 
                     onClick={handleSubmitUser}
-                    disabled={creating || !formData.name || !formData.email || !formData.phone}
+                    disabled={creating || !formData.name || !formData.email || !formData.phone || !formData.password}
                   >
                     {creating ? 'Creating...' : 'Create Customer'}
                   </Button>

@@ -77,6 +77,7 @@ export default function LoanPage() {
     whatsapp_number: '',
     phone: '',
     address: '',
+    password: '', // Password for new user creation
     
     // Loan application data
     requested_amount: '',
@@ -170,7 +171,8 @@ export default function LoanPage() {
       email: '',
       whatsapp_number: '',
       phone: '',
-      id_number: ''
+      id_number: '',
+      password: ''
     }))
   }
 
@@ -244,6 +246,7 @@ export default function LoanPage() {
       whatsapp_number: '',
       phone: '',
       address: '',
+      password: '',
       requested_amount: '',
       loan_purpose: '',
       tenure: '',
@@ -274,11 +277,11 @@ export default function LoanPage() {
     }
     
     if (loanFormData.user_selection === 'new') {
-      if (!loanFormData.first_name || !loanFormData.last_name || !loanFormData.email || !loanFormData.whatsapp_number) {
+      if (!loanFormData.first_name || !loanFormData.last_name || !loanFormData.email || !loanFormData.whatsapp_number || !loanFormData.password) {
         toast({
           variant: "destructive",
           title: "Validation Error",
-          description: "Please fill in all customer details"
+          description: "Please fill in all customer details including password"
         })
         return
       }
@@ -328,20 +331,64 @@ export default function LoanPage() {
           }
         }
       } else {
-        // New user - Generate UUID for user_id
-        userId = crypto.randomUUID ? crypto.randomUUID() : `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        userData = {
-          first_name: loanFormData.first_name,
-          last_name: loanFormData.last_name,
-          email: loanFormData.email,
-          whatsapp_number: loanFormData.whatsapp_number,
-          phone: loanFormData.phone || loanFormData.whatsapp_number,
-          id_number: loanFormData.id_number,
-          address: loanFormData.address,
-          // Add payment schedule to user_data
-          payment_frequency: loanFormData.payment_frequency,
-          payment_day_1: loanFormData.payment_day_1,
-          payment_day_2: loanFormData.payment_day_2
+        // New user - First create user in Supabase auth function
+        try {
+          // Call Supabase auth function to create user
+          const supabaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co'
+          const supabaseAnonKey = process.env.NEXT_PUBLIC_API_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4amZxdmRocGhrdWd1dGtvdmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjgyMTEzMjMsImV4cCI6MjA0Mzc4NzMyM30.sLdFz4jnaQVkBBrPqUMF92Yl_uPDDpc_0VjNXIIjmSI'
+          
+          const authResponse = await fetch(`${supabaseUrl}/functions/v1/auth`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${supabaseAnonKey}`,
+              'apikey': supabaseAnonKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: `${loanFormData.first_name} ${loanFormData.last_name}`,
+              phone_number: loanFormData.whatsapp_number,
+              role: 'user',
+              email: loanFormData.email,
+              unique_id: '', // Let the backend handle unique_id generation
+              action: 'login', // Using login as it handles both signup and login
+              password: loanFormData.password
+            })
+          })
+          
+          if (!authResponse.ok) {
+            const errorData = await authResponse.json()
+            throw new Error(errorData.message || 'Failed to create user account')
+          }
+          
+          const authData = await authResponse.json()
+          console.log('User created successfully:', authData)
+          
+          // Use the created user's ID and unique_id from response
+          userId = authData.user?.id || crypto.randomUUID()
+          const uniqueId = authData.user?.unique_id || ''
+          
+          userData = {
+            first_name: loanFormData.first_name,
+            last_name: loanFormData.last_name,
+            email: loanFormData.email,
+            whatsapp_number: loanFormData.whatsapp_number,
+            phone: loanFormData.phone || loanFormData.whatsapp_number,
+            id_number: loanFormData.id_number,
+            address: loanFormData.address,
+            unique_id: uniqueId,
+            // Add payment schedule to user_data
+            payment_frequency: loanFormData.payment_frequency,
+            payment_day_1: loanFormData.payment_day_1,
+            payment_day_2: loanFormData.payment_day_2
+          }
+        } catch (error) {
+          toast({
+            variant: "destructive",
+            title: "User Creation Failed",
+            description: error instanceof Error ? error.message : "Failed to create user account"
+          })
+          setIsCreating(false)
+          return
         }
       }
       
@@ -776,6 +823,16 @@ export default function LoanPage() {
                         placeholder="john@example.com"
                         value={loanFormData.email}
                         onChange={(e) => handleFormChange('email', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password *</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="Enter password"
+                        value={loanFormData.password}
+                        onChange={(e) => handleFormChange('password', e.target.value)}
                       />
                     </div>
                     <div className="space-y-2">
