@@ -74,7 +74,7 @@ export default function LoginPage() {
         
         <Card>
           <CardHeader>
-            <CardTitle className="text-center">Admin Login</CardTitle>
+            <CardTitle className="text-center">Staff Login</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -143,7 +143,7 @@ export default function LoginPage() {
 
             <div className="mt-6 text-center">
               <p className="text-xs text-gray-500">
-                Only admin users can access this dashboard.
+                For staff members only (Admin, Manager, Agent).
                 <br />
                 Please contact your administrator if you need access.
               </p>

@@ -81,12 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.success && data.data.user) {
         const userData = data.data.user
-        
-        // Check if user has admin role
-        if (userData.role !== 'admin') {
-          return { 
-            success: false, 
-            error: 'Access denied. Admin privileges required.' 
+
+        // Check if user has admin, manager, or agent role
+        if (!['admin', 'manager', 'agent'].includes(userData.role)) {
+          return {
+            success: false,
+            error: 'Access denied. Staff privileges required.'
           }
         }
 
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const token = data.data.token || `auth-${Date.now()}`
         localStorage.setItem('auth-token', token)
         localStorage.setItem('auth-user', JSON.stringify(userData))
-        
+
         setUser(userData)
         return { success: true }
       } else {

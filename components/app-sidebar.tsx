@@ -27,7 +27,8 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useAuth } from '@/contexts/auth-context'
 
-const menuItems = [
+// Admin and Manager can see all menu items
+const adminMenuItems = [
   {
     title: "Dashboard",
     url: "/",
@@ -65,6 +66,20 @@ const menuItems = [
   }
 ]
 
+// Agents can only see dashboard and their customers
+const agentMenuItems = [
+  {
+    title: "Dashboard",
+    url: "/",
+    icon: Home,
+  },
+  {
+    title: "My Customers",
+    url: "/agents/dashboard",
+    icon: Users,
+  }
+]
+
 export function AppSidebar() {
   const { user, logout } = useAuth()
 
@@ -72,6 +87,9 @@ export function AppSidebar() {
     logout()
     window.location.href = '/login'
   }
+
+  // Determine which menu items to show based on user role
+  const menuItems = user?.role === 'agent' ? agentMenuItems : adminMenuItems
 
   return (
     <Sidebar variant="inset" className="bg-gray-100">
@@ -82,7 +100,9 @@ export function AppSidebar() {
           </div>
           <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="truncate font-semibold">CrediLife</span>
-            <span className="truncate text-xs text-muted-foreground">Dashboard</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {user?.role === 'agent' ? 'Agent Portal' : 'Dashboard'}
+            </span>
           </div>
         </div>
       </SidebarHeader>

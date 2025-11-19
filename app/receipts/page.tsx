@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { RoleGuard } from "@/components/role-guard"
 import {
     Table,
     TableBody,
@@ -284,7 +285,7 @@ function ReceiptsTable({ receipts, onViewReceipt }: ReceiptsTableProps) {
 }
 
 // Main Receipts Page Component
-export default function Receipts() {
+function Receipts() {
     const [receipts, setReceipts] = useState<Receipt[]>([])
     const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -565,4 +566,13 @@ export default function Receipts() {
         </DashboardLayout>
  
 )
+}
+
+// Wrap with RoleGuard to protect admin-only page
+export default function ReceiptsWithGuard() {
+  return (
+    <RoleGuard allowedRoles={["admin", "manager"]}>
+      <Receipts />
+    </RoleGuard>
+  )
 }

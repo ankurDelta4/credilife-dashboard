@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { RoleGuard } from "@/components/role-guard"
 import { DataTable, Column } from "@/components/data-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -117,7 +118,7 @@ function UsersTable({
   )
 }
 
-export default function UsersPage() {
+function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
@@ -566,5 +567,14 @@ export default function UsersPage() {
         </Card>
       </div>
     </DashboardLayout>
+  )
+}
+
+// Wrap with RoleGuard to protect admin-only page
+export default function UsersPageWithGuard() {
+  return (
+    <RoleGuard allowedRoles={["admin", "manager"]}>
+      <UsersPage />
+    </RoleGuard>
   )
 }

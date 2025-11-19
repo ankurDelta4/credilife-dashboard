@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { RoleGuard } from "@/components/role-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,7 +34,7 @@ interface WhatsAppConnection {
   config?: any
 }
 
-export default function NotificationSettingsPage() {
+function NotificationSettingsPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
@@ -1576,5 +1577,14 @@ Please ensure timely payment to avoid late fees.
 
       </div>
     </DashboardLayout>
+  )
+}
+
+// Wrap with RoleGuard to protect admin-only page
+export default function NotificationSettingsPageWithGuard() {
+  return (
+    <RoleGuard allowedRoles={["admin", "manager"]}>
+      <NotificationSettingsPage />
+    </RoleGuard>
   )
 }

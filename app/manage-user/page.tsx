@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { RoleGuard } from "@/components/role-guard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -120,7 +121,7 @@ const getRoleColor = (role: string) => {
   return roleColors[role as keyof typeof roleColors] || "bg-gray-100 text-gray-800"
 }
 
-export default function ManageStaffPage() {
+function ManageUser() {
   const [users, setUsers] = useState<SystemUser[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
@@ -565,5 +566,14 @@ Staff members
         </Dialog>
       </div>
     </DashboardLayout>
+  )
+}
+
+// Wrap the component with RoleGuard
+export default function ManageUserPageWithGuard() {
+  return (
+    <RoleGuard allowedRoles={['admin', 'manager']}>
+      <ManageUser />
+    </RoleGuard>
   )
 }

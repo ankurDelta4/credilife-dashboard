@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { RoleGuard } from "@/components/role-guard"
 import { DataTable, Column } from "@/components/data-table"
 import { LoanDetailsModal } from "@/components/loan-details-modal"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,7 +46,7 @@ const loanColumns: Column[] = [
   { key: "createdAt", label: "Created Date" },
 ]
 
-export default function LoanPage() {
+function LoanPage() {
   const [loans, setLoans] = useState<Loan[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -1088,5 +1089,14 @@ export default function LoanPage() {
 
       </div>
     </DashboardLayout>
+  )
+}
+
+// Wrap with RoleGuard to protect admin-only page
+export default function LoanPageWithGuard() {
+  return (
+    <RoleGuard allowedRoles={["admin", "manager"]}>
+      <LoanPage />
+    </RoleGuard>
   )
 }

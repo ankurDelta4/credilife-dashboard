@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { DashboardLayout } from "@/components/dashboard-layout"
+import { RoleGuard } from "@/components/role-guard"
 import {
     Table,
     TableBody,
@@ -740,7 +741,7 @@ function LoanApplicationsTable({
     )
 }
 
-export default function LoanApplicationsPage() {
+function LoanApplicationsPage() {
     const [applications, setApplications] = useState<LoanApplication[]>([])
     const [selectedApplication, setSelectedApplication] = useState<LoanApplication | null>(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -1267,4 +1268,13 @@ export default function LoanApplicationsPage() {
             </div>
         </DashboardLayout>
     )
+}
+
+// Wrap with RoleGuard to protect admin-only page
+export default function LoanApplicationsPageWithGuard() {
+  return (
+    <RoleGuard allowedRoles={["admin", "manager"]}>
+      <LoanApplicationsPage />
+    </RoleGuard>
+  )
 }
