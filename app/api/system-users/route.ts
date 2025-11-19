@@ -64,7 +64,16 @@ export async function GET(request: NextRequest) {
         if (status && status !== 'all') queryParams.append('status', status);
 
         try {
-            const backendResponse = await fetch(`${backendUrl}/system_users?select=*`, {
+            // Build query with filters
+            let query = `${backendUrl}/system_users?select=*`;
+            if (role && role !== 'all') {
+                query += `&role=eq.${role}`;
+            }
+            if (status && status !== 'all') {
+                query += `&status=eq.${status}`;
+            }
+
+            const backendResponse = await fetch(query, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',

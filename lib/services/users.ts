@@ -3,6 +3,8 @@ import { api, ApiResponse, PaginatedResponse } from './api';
 interface PaginationParams {
     page?: number;
     limit?: number;
+    status?: 'active' | 'inactive';
+    search?: string;
 }
 
 // Types
@@ -13,6 +15,7 @@ export interface User {
     role: string;
     status: 'active' | 'inactive';
     createdAt: string;
+    assigned_agent_id?: number | null;
 }
 
 export interface CreateUserRequest {

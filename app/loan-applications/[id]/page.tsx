@@ -30,6 +30,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { LoanApplicationDashboard } from "@/components/loan-application-dashboard"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 interface LoanApplication {
     id: string | number
@@ -99,6 +106,8 @@ export default function LoanApplicationDetailsPage({
     const [isDeleting, setIsDeleting] = useState(false)
     const [chatLink, setChatLink] = useState("")
     const [isApproving, setIsApproving] = useState(false)
+    const [agents, setAgents] = useState<Array<{ id: number; name: string; email: string }>>([])
+    const [selectedAgentId, setSelectedAgentId] = useState<string>("")
     const router = useRouter()
     const { toast } = useToast()
 
@@ -107,6 +116,43 @@ export default function LoanApplicationDetailsPage({
             fetchApplicationDetails()
         }
     }, [id])
+
+    useEffect(() => {
+        // Fetch agents for assignment from staff table
+        const fetchAgents = async () => {
+            try {
+                console.log('[LOAN APP] Fetching agents from staff table...')
+                const response = await fetch('/api/staff?role=agent')
+                console.log('[LOAN APP] Response status:', response.status)
+                console.log('[LOAN APP] Response ok:', response.ok)
+
+                const data = await response.json()
+                console.log('[LOAN APP] Staff API response:', data)
+
+                if (!data.success) {
+                    console.error('[LOAN APP] API returned error:', {
+                        error: data.error,
+                        code: data.code,
+                        details: data.details,
+                        status: data.status
+                    })
+                }
+
+                console.log('[LOAN APP] Agents data:', data.data?.users)
+                console.log('[LOAN APP] Number of agents:', data.data?.users?.length || 0)
+
+                if (data.success && data.data?.users) {
+                    setAgents(data.data.users)
+                    console.log('[LOAN APP] Agents set successfully:', data.data.users.length)
+                } else {
+                    console.warn('[LOAN APP] No agents found or API call failed:', data)
+                }
+            } catch (error) {
+                console.error('[LOAN APP] Error fetching agents:', error)
+            }
+        }
+        fetchAgents()
+    }, [])
 
     const fetchApplicationDetails = async () => {
         try {
@@ -725,20 +771,66 @@ export default function LoanApplicationDetailsPage({
                             )}
                             
                             {/* Show Approve Loan for under-verification status */}
-                            {(application.status === "under-verification" || application.status === "under_verification" || 
+                            {(application.status === "under-verification" || application.status === "under_verification" ||
                               application.status === "verified" || application.status === "verification") && (
+                                <>
+                                    {/* Agent Selection */}
+                                    <div className="flex-1">
+                                        <Label htmlFor="agent-select" className="text-sm font-medium mb-2 block">
+                                            Assign Agent to Loan
+                                        </Label>
+                                        <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+                                            <SelectTrigger id="agent-select" className="w-full">
+                                                <SelectValue placeholder="Select an agent to assign" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {agents.length === 0 ? (
+                                                    <SelectItem value="no-agents" disabled>No agents available</SelectItem>
+                                                ) : (
+                                                    agents.map((agent) => (
+                                                        <SelectItem key={agent.id} value={agent.id.toString()}>
+                                                            {agent.name} ({agent.email})
+                                                        </SelectItem>
+                                                    ))
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-gray-600 mt-1">
+                                            Select an agent who will be assigned to manage this loan and customer.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Approve Loan Button */}
+                        {(application.status === "under-verification" || application.status === "under_verification" ||
+                          application.status === "verified" || application.status === "verification") && (
+                            <div className="flex gap-4">
                                 <Button
                                     onClick={async () => {
+                                        if (!selectedAgentId) {
+                                            toast({
+                                                variant: "destructive",
+                                                title: "Agent Required",
+                                                description: "Please select an agent to assign to this loan before approving"
+                                            })
+                                            return
+                                        }
+
                                         if (!confirm('Are you sure you want to approve this loan application?')) {
                                             return
                                         }
-                                        
+
                                         setIsApproving(true)
                                         try {
-                                            const response = await fetch(`/api/loan-applications/${id}/status`, {
+                                            const response = await fetch(`/api/loans/${id}/approve`, {
                                                 method: 'PATCH',
                                                 headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ status: 'approved' })
+                                                body: JSON.stringify({
+                                                    status: 'approved',
+                                                    assigned_agent_id: parseInt(selectedAgentId)
+                                                })
                                             })
                                             
                                             const data = await response.json()
@@ -782,9 +874,9 @@ export default function LoanApplicationDetailsPage({
                                         </>
                                     )}
                                 </Button>
-                            )}
-                        </div>
-                        
+                            </div>
+                        )}
+
                         {/* Status Message */}
                         {(application.status === "under-verification" || application.status === "under_verification") && (
                             <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">

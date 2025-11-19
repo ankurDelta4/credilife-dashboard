@@ -3,9 +3,25 @@ import { NextRequest, NextResponse } from 'next/server';
 // GET: Fetch all staff members
 export async function GET(request: NextRequest) {
     try {
+        const { searchParams } = new URL(request.url);
+        const role = searchParams.get('role') || '';
+        // Note: staff table doesn't have a status column, so we ignore status filter
+
         const backendUrl = process.env.BACKEND_URL || 'https://axjfqvdhphkugutkovam.supabase.co/rest/v1';
-        
-        const response = await fetch(`${backendUrl}/staff?select=*`, {
+
+        // Build query with filters
+        let query = `${backendUrl}/staff?select=*`;
+        if (role && role !== 'all') {
+            query += `&role=eq.${role}`;
+        }
+
+        console.log('[STAFF API] Fetching from query:', query);
+        console.log('[STAFF API] Headers:', {
+            'Content-Type': 'application/json',
+            'apikey': process.env.API_KEY ? 'Present' : 'Missing',
+        });
+
+        const response = await fetch(query, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -14,8 +30,14 @@ export async function GET(request: NextRequest) {
             },
         });
 
+        console.log('[STAFF API] Response status:', response.status);
+        console.log('[STAFF API] Response ok:', response.ok);
+
         if (response.ok) {
             const staffData = await response.json();
+            console.log('[STAFF API] Staff data received:', JSON.stringify(staffData, null, 2));
+            console.log('[STAFF API] Number of staff members:', staffData?.length || 0);
+
             return NextResponse.json({
                 success: true,
                 data: {
@@ -24,11 +46,17 @@ export async function GET(request: NextRequest) {
                 message: 'Staff retrieved successfully'
             });
         } else {
+            const errorText = await response.text();
+            console.error('[STAFF API] Error response:', errorText);
+            console.error('[STAFF API] Response status:', response.status);
+
             return NextResponse.json(
                 {
                     success: false,
                     error: 'Failed to fetch staff data',
-                    code: 'FETCH_ERROR'
+                    code: 'FETCH_ERROR',
+                    details: errorText,
+                    status: response.status
                 },
                 { status: response.status }
             );

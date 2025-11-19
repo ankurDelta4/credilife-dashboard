@@ -8,6 +8,8 @@ export async function PATCH(
 ) {
     try {
         const { id: applicationId } = await params;
+        const body = await _request.json();
+        const assignedAgentId = body.assigned_agent_id;
         
         if (!applicationId) {
             return NextResponse.json(
@@ -123,7 +125,7 @@ export async function PATCH(
                         }
                     }
                     
-                    // Step 1: Update application status to approved
+                    // Step 1: Update application status and current_stage to approved
                     const updateApplicationResponse = await fetch(`${backendUrl}/loan_applications?id=eq.${applicationId}`, {
                         method: 'PATCH',
                         headers: {
@@ -131,9 +133,10 @@ export async function PATCH(
                             'apikey': `${process.env.API_KEY || ''}`,
                             'Authorization': `Bearer ${process.env.API_KEY || ''}`,
                         },
-                        body: JSON.stringify({ 
+                        body: JSON.stringify({
                             status: 'approved',
-                            updated_at: new Date().toISOString() 
+                            current_stage: 'approved',
+                            updated_at: new Date().toISOString()
                         })
                     });
 
@@ -143,26 +146,25 @@ export async function PATCH(
                     
                     if (updateApplicationResponse.status === 200 || updateApplicationResponse.status === 204) {
                         console.log('[APPROVE] Application status updated successfully, proceeding to create loan...');
-                        
+
                         // Step 2: Create a new loan record
                         const currentDate = new Date(); // Approval date
                         const startDate = new Date(currentDate); // Start from approval date
-                        
+
                         // Calculate end date based on tenure (in months)
                         // If approved in July with 3-month tenure, end date will be October
                         const endDate = new Date(startDate);
                         const tenureMonths = parseInt(application.tenure) || 12; // Default to 12 months if not specified
                         endDate.setMonth(startDate.getMonth() + tenureMonths);
-                        
-                        const loanId = crypto.randomUUID();
+
+                        // Don't set ID - let database auto-generate it
                         const loanData = {
-                            id: loanId,
                             user_id: application.user_id,
                             principal_amount: parseFloat(application.principal_amount) || parseFloat(application.requested_amount) || 0,
                             start_date: startDate.toISOString().split('T')[0],
                             end_date: endDate.toISOString().split('T')[0],
                             status: 'running',
-                            assigned_agent_id: null,
+                            assigned_agent_id: assignedAgentId || null,
                             interest_amount: parseFloat(application.interest_amount) || 0,
                             closing_fees: parseFloat(application.closing_fees) || 0,
                             total_repayment: parseFloat(application.total_repayment) || 0,
@@ -172,8 +174,10 @@ export async function PATCH(
                             updated_at: new Date().toISOString(),
                             amount_paid: 0
                         };
-                        
-                        console.log('[APPROVE] Creating loan with data:', JSON.stringify(loanData, null, 2));
+
+                        console.log('[APPROVE] ===== LOAN CREATION =====');
+                        console.log('[APPROVE] Creating loan with assigned_agent_id:', assignedAgentId);
+                        console.log('[APPROVE] Loan data:', JSON.stringify(loanData, null, 2));
 
                         const createLoanResponse = await fetch(`${backendUrl}/loans`, {
                             method: 'POST',
@@ -181,6 +185,7 @@ export async function PATCH(
                                 'Content-Type': 'application/json',
                                 'apikey': `${process.env.API_KEY || ''}`,
                                 'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                                'Prefer': 'return=representation'
                             },
                             body: JSON.stringify(loanData)
                         });
@@ -188,20 +193,75 @@ export async function PATCH(
                         console.log(`[APPROVE] Loan creation response status: ${createLoanResponse.status}`);
                         const loanResponseText = await createLoanResponse.text();
                         console.log(`[APPROVE] Loan creation response:`, loanResponseText);
-                        
+
                         if (createLoanResponse.status === 201 || createLoanResponse.status === 200) {
-                            console.log(`[APPROVE] ✓ Loan created successfully with ID: ${loanId}`);
                             let createdLoan = null;
+                            let loanId = null;
                             try {
-                                createdLoan = loanResponseText ? JSON.parse(loanResponseText) : null;
+                                const parsedResponse = loanResponseText ? JSON.parse(loanResponseText) : null;
+                                createdLoan = Array.isArray(parsedResponse) ? parsedResponse[0] : parsedResponse;
+                                loanId = createdLoan?.id;
+                                console.log(`[APPROVE] ✓ Loan created successfully with ID: ${loanId}`);
                             } catch (e) {
-                                console.log('[APPROVE] Could not parse loan response, but loan was created');
+                                console.error('[APPROVE] Could not parse loan response:', e);
+                                console.error('[APPROVE] Response text:', loanResponseText);
+                                throw new Error('Failed to parse loan creation response');
                             }
-                            
+
+                            if (!loanId) {
+                                console.error('[APPROVE] No loan ID returned from database');
+                                throw new Error('No loan ID returned from database');
+                            }
+
+                            // Step 2.5: Update user's assigned_agent_id if agent was assigned
+                            if (assignedAgentId && application.user_id) {
+                                try {
+                                    console.log('[APPROVE] ===== USER UPDATE =====');
+                                    console.log(`[APPROVE] Updating user ID: ${application.user_id}`);
+                                    console.log(`[APPROVE] Setting assigned_agent_id to: ${assignedAgentId}`);
+
+                                    const userUpdateData = {
+                                        assigned_agent_id: assignedAgentId,
+                                        updated_at: new Date().toISOString()
+                                    };
+                                    console.log('[APPROVE] User update data:', JSON.stringify(userUpdateData, null, 2));
+
+                                    const updateUserResponse = await fetch(`${backendUrl}/users?id=eq.${application.user_id}`, {
+                                        method: 'PATCH',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'apikey': `${process.env.API_KEY || ''}`,
+                                            'Authorization': `Bearer ${process.env.API_KEY || ''}`,
+                                        },
+                                        body: JSON.stringify(userUpdateData)
+                                    });
+
+                                    console.log(`[APPROVE] User update response status: ${updateUserResponse.status}`);
+
+                                    if (updateUserResponse.ok) {
+                                        const responseText = await updateUserResponse.text();
+                                        console.log(`[APPROVE] ✓ User assigned_agent_id updated successfully`);
+                                        console.log(`[APPROVE] User update response:`, responseText);
+                                    } else {
+                                        const errorText = await updateUserResponse.text();
+                                        console.error(`[APPROVE] ⚠ Failed to update user assigned_agent_id. Status: ${updateUserResponse.status}`);
+                                        console.error(`[APPROVE] Error details:`, errorText);
+                                    }
+                                } catch (userUpdateError) {
+                                    console.error('[APPROVE] ✗ Error updating user assigned_agent_id:', userUpdateError);
+                                    // Don't fail the entire process if user update fails
+                                }
+                            } else {
+                                console.log('[APPROVE] ⚠ Skipping user update - assignedAgentId or user_id missing:', {
+                                    assignedAgentId,
+                                    user_id: application.user_id
+                                });
+                            }
+
                             // Step 3: Generate and create installments
                             try {
                                 const loanForInstallments = {
-                                    id: loanData.id,
+                                    id: loanId,
                                     principal_amount: loanData.principal_amount,
                                     interest_amount: loanData.interest_amount || undefined,
                                     total_repayment: loanData.total_repayment || (loanData.principal_amount + (loanData.interest_amount || 0)),
@@ -210,12 +270,12 @@ export async function PATCH(
                                     start_date: loanData.start_date,
                                     closing_fees: loanData.closing_fees || undefined
                                 };
-                                
+
                                 // Generate installments based on loan details
                                 const installments = generateInstallments(loanForInstallments);
-                                console.log(`[APPROVE] Generated ${installments.length} installments for loan ${loanData.id}`);
+                                console.log(`[APPROVE] Generated ${installments.length} installments for loan ${loanId}`);
                                 console.log(`[APPROVE] First 3 installments:`, installments.slice(0, 3));
-                                
+
                                 // Create installments in the database
                                 console.log('[APPROVE] Creating installments in database...');
                                 const installmentResult = await createInstallmentsInDatabase(
@@ -223,26 +283,26 @@ export async function PATCH(
                                     backendUrl,
                                     process.env.API_KEY || ''
                                 );
-                                
+
                                 if (installmentResult.success) {
-                                    console.log(`[APPROVE] ✓ Successfully created ${installments.length} installments for loan ${loanData.id}`);
+                                    console.log(`[APPROVE] ✓ Successfully created ${installments.length} installments for loan ${loanId}`);
                                     console.log('[APPROVE] ===== Approval process completed successfully =====');
                                     return NextResponse.json({
                                         success: true,
                                         message: 'Loan application approved, loan created, and installments generated successfully',
                                         data: {
                                             applicationId: applicationId,
-                                            loanId: loanData.id,
+                                            loanId: loanId,
                                             installmentsCreated: installments.length
                                         }
                                     });
                                 } else {
                                     // Rollback: Delete the created loan
                                     console.error('Failed to create installments, rolling back loan creation:', installmentResult.error);
-                                    
+
                                     try {
                                         // Delete the loan that was just created
-                                        const deleteLoanResponse = await fetch(`${backendUrl}/loans?id=eq.${loanData.id}`, {
+                                        const deleteLoanResponse = await fetch(`${backendUrl}/loans?id=eq.${loanId}`, {
                                             method: 'DELETE',
                                             headers: {
                                                 'Content-Type': 'application/json',
@@ -250,7 +310,7 @@ export async function PATCH(
                                                 'Authorization': `Bearer ${process.env.API_KEY || ''}`,
                                             }
                                         });
-                                        
+
                                         // Revert application status back to pending
                                         const revertApplicationResponse = await fetch(`${backendUrl}/loan_applications?id=eq.${applicationId}`, {
                                             method: 'PATCH',
@@ -259,36 +319,36 @@ export async function PATCH(
                                                 'apikey': `${process.env.API_KEY || ''}`,
                                                 'Authorization': `Bearer ${process.env.API_KEY || ''}`,
                                             },
-                                            body: JSON.stringify({ 
+                                            body: JSON.stringify({
                                                 status: 'pending',
-                                                updated_at: new Date().toISOString() 
+                                                updated_at: new Date().toISOString()
                                             })
                                         });
-                                        
+
                                         console.log('Rolled back loan creation and reverted application status to pending');
-                                        
+
                                         return NextResponse.json({
                                             success: false,
                                             error: 'Failed to create installments. Loan creation was rolled back and application status reverted to pending.',
                                             details: installmentResult.error
                                         }, { status: 500 });
-                                        
+
                                     } catch (rollbackError) {
                                         console.error('Rollback failed:', rollbackError);
                                         return NextResponse.json({
                                             success: false,
                                             error: 'Failed to create installments and rollback also failed. Manual intervention required.',
-                                            loanId: loanData.id
+                                            loanId: loanId
                                         }, { status: 500 });
                                     }
                                 }
                             } catch (installmentError) {
                                 // Rollback: Delete the created loan
                                 console.error('Error generating installments, rolling back:', installmentError);
-                                
+
                                 try {
                                     // Delete the loan that was just created
-                                    const deleteLoanResponse = await fetch(`${backendUrl}/loans?id=eq.${loanData.id}`, {
+                                    const deleteLoanResponse = await fetch(`${backendUrl}/loans?id=eq.${loanId}`, {
                                         method: 'DELETE',
                                         headers: {
                                             'Content-Type': 'application/json',
@@ -296,7 +356,7 @@ export async function PATCH(
                                             'Authorization': `Bearer ${process.env.API_KEY || ''}`,
                                         }
                                     });
-                                    
+
                                     // Revert application status back to pending
                                     const revertApplicationResponse = await fetch(`${backendUrl}/loan_applications?id=eq.${applicationId}`, {
                                         method: 'PATCH',
@@ -305,26 +365,26 @@ export async function PATCH(
                                             'apikey': `${process.env.API_KEY || ''}`,
                                             'Authorization': `Bearer ${process.env.API_KEY || ''}`,
                                         },
-                                        body: JSON.stringify({ 
+                                        body: JSON.stringify({
                                             status: 'pending',
-                                            updated_at: new Date().toISOString() 
+                                            updated_at: new Date().toISOString()
                                         })
                                     });
-                                    
+
                                     console.log('Rolled back loan creation and reverted application status to pending');
-                                    
+
                                     return NextResponse.json({
                                         success: false,
                                         error: 'Failed to generate installments. Loan creation was rolled back.',
                                         details: installmentError instanceof Error ? installmentError.message : 'Unknown error'
                                     }, { status: 500 });
-                                    
+
                                 } catch (rollbackError) {
                                     console.error('Rollback failed:', rollbackError);
                                     return NextResponse.json({
                                         success: false,
                                         error: 'Failed to generate installments and rollback also failed. Manual intervention required.',
-                                        loanId: loanData.id
+                                        loanId: loanId
                                     }, { status: 500 });
                                 }
                             }

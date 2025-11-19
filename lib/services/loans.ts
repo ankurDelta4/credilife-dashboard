@@ -3,6 +3,9 @@ import { api, ApiResponse, PaginatedResponse } from './api';
 interface PaginationParams {
     page?: number;
     limit?: number;
+    status?: string;
+    userId?: string;
+    search?: string;
 }
 
 // Types
@@ -18,6 +21,7 @@ export interface Loan {
     createdAt: string;
     updatedAt: string;
     reason?: string;
+    assigned_agent_id?: number | null;
 }
 
 export interface CreateLoanRequest {

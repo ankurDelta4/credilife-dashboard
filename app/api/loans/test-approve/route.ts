@@ -54,15 +54,14 @@ export async function GET(request: NextRequest) {
     
     const existingLoans = await existingLoansResponse.json();
     
-    // Step 3: Prepare loan data
+    // Step 3: Prepare loan data (without manual ID - database auto-generates)
     const currentDate = new Date();
     const startDate = new Date(currentDate);
     const endDate = new Date(startDate);
     const tenureMonths = parseInt(application.tenure) || 12;
     endDate.setMonth(startDate.getMonth() + tenureMonths);
-    
+
     const loanData = {
-      id: crypto.randomUUID(),
       user_id: application.user_id,
       principal_amount: parseFloat(application.principal_amount) || parseFloat(application.requested_amount) || 0,
       start_date: startDate.toISOString().split('T')[0],
