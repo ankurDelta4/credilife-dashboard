@@ -267,6 +267,12 @@ function ManageUser() {
       return
     }
 
+    // Validate password length
+    if (formData.password.length < 6) {
+      alert('Password must be at least 6 characters long')
+      return
+    }
+
     try {
       setCreating(true)
       console.log("Creating staff member")
@@ -362,10 +368,9 @@ function ManageUser() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input 
-                    id="phone" 
-                    type="tel" 
-                    placeholder="e.g. +91(829)234-5678 → 91829234567"
+                  <Input
+                    id="phone"
+                    type="tel"
                     value={formData.phone}
                     onChange={(e) => handleFormChange('phone', e.target.value)}
                   />
@@ -383,13 +388,22 @@ function ManageUser() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    placeholder="Enter password"
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter password (min 6 characters)"
                     value={formData.password}
                     onChange={(e) => handleFormChange('password', e.target.value)}
                   />
+                  <p className="text-xs text-gray-500">
+                    Minimum 6 characters required
+                    {formData.password.length > 0 && formData.password.length < 6 && (
+                      <span className="text-red-500 ml-2">✗ Too short</span>
+                    )}
+                    {formData.password.length >= 6 && (
+                      <span className="text-green-500 ml-2">✓ Valid length</span>
+                    )}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">Role</Label>
